@@ -26,6 +26,7 @@ import { StorageService } from '../services/storage';
 import { ComplexFlowchartViewer } from './ComplexFlowchartViewer';
 import { FormattedClinicalText } from './FormattedClinicalText';
 import { EixoEmojiBadge } from './EixoEmojiBadge';
+import { obterPassosNormalizados, limparPerguntaNorteadora } from '../utils/flowchartNormalizer';
 
 interface VisualOcclusionModalProps {
   card: CardClinico;
@@ -78,19 +79,7 @@ export const VisualOcclusionModal: React.FC<VisualOcclusionModalProps> = ({
 
   const isImageOcclusion = card.tipoCard === 'image_occlusion' && card.imagemUrl;
   const mascaras = card.mascarasImagem || [];
-  
-  const blocos = (card.blocosOclusao && card.blocosOclusao.length > 0)
-    ? card.blocosOclusao.map(b => ({
-        ...b,
-        textoOculto: (b.textoOculto || '').replace(/^\[.*?\]:\s*/, ''),
-      }))
-    : (card.algoritmoDecisao?.blocos?.map((b, idx) => ({
-        id: b.id,
-        posicao: { x: 10, y: 15 + idx * 25, largura: 80, altura: 20 },
-        textoOculto: (b.descricao || b.titulo || '').replace(/^\[.*?\]:\s*/, ''),
-        dica: b.titulo,
-        revelado: false,
-      })) || []);
+  const passosNormalizados = React.useMemo(() => obterPassosNormalizados(card), [card]);
 
   const toggleMascara = (id: string) => {
     setBlocosRevelados(prev => ({
@@ -107,7 +96,7 @@ export const VisualOcclusionModal: React.FC<VisualOcclusionModalProps> = ({
     } else if (isComplexFlowchart && complexData) {
       complexData.nos.forEach(n => { todos[n.id] = true; });
     } else {
-      blocos.forEach(b => { todos[b.id] = true; });
+      passosNormalizados.forEach(p => { todos[p.id] = true; });
     }
     setBlocosRevelados(todos);
   };
@@ -125,20 +114,25 @@ export const VisualOcclusionModal: React.FC<VisualOcclusionModalProps> = ({
       const proximo = complexData.nos.find(n => !blocosRevelados[n.id]);
       if (proximo) toggleMascara(proximo.id);
     } else {
-      const proximo = blocos.find(b => !blocosRevelados[b.id]);
+      const proximo = passosNormalizados.find(p => !blocosRevelados[p.id]);
       if (proximo) toggleMascara(proximo.id);
     }
   };
 
   const concluirRevisao = (avaliacao: 'errei' | 'dificil' | 'bom' | 'facil') => {
     const tempoGasto = Math.max(1, Math.round((Date.now() - tempoInicio) / 1000));
-    onRegistrarRevisao(card.id, avaliacao, tempoGasto);
+    const cardId = card.id;
     onClose();
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        onRegistrarRevisao(cardId, avaliacao, tempoGasto);
+      }, 0);
+    });
   };
 
   const totalItens = isImageOcclusion 
     ? mascaras.length 
-    : (isComplexFlowchart && complexData ? complexData.nos.length : blocos.length);
+    : (isComplexFlowchart && complexData ? complexData.nos.length : passosNormalizados.length);
   const totalRevelados = Object.values(blocosRevelados).filter(Boolean).length;
   const todosRevelados = totalItens > 0 && totalRevelados >= totalItens;
 
@@ -652,80 +646,88 @@ export const VisualOcclusionModal: React.FC<VisualOcclusionModalProps> = ({
               )}
             </div>
           ) : (
-            /* MODO 3: FLUXOGRAMA LINEAR EM ETAPAS */
-            <div className="bg-gradient-to-b from-slate-50 to-slate-100/70 p-5 rounded-3xl border border-slate-200/80 space-y-3">
-              <div className="flex items-center justify-between border-b border-slate-200/60 pb-3 mb-2">
-                <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                  <Stethoscope className="w-4 h-4 text-blue-600" />
-                  Fluxograma Linear por Etapas
+            /* MODO 3: PASSO A PASSO SEQUENCIAL (DESDE O PASSO 1 ATÉ O FIM) */
+            <div className="space-y-3">
+              {/* Pergunta / Tema Norteador Direto ao Ponto */}
+              <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-50 border border-slate-200/80">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 block mb-1">
+                  Tema / Pergunta Norteadora
                 </span>
-                <span className="text-[11px] text-slate-400 font-mono">
-                  {totalRevelados} / {totalItens} revelados
-                </span>
+                <div className="text-sm sm:text-base font-bold text-slate-900 leading-snug">
+                  <FormattedClinicalText
+                    text={limparPerguntaNorteadora(card.perguntaGatilho || (card as any).pergunta, card.titulo)}
+                  />
+                </div>
               </div>
 
-              <div className="space-y-0 relative">
-                {blocos.map((bloco, idx) => {
-                  const revelado = blocosRevelados[bloco.id];
-                  const ehPrimeiro = idx === 0;
+              <div className="space-y-1.5 relative">
+                {passosNormalizados.map((passo, idx) => {
+                  const revelado = Boolean(blocosRevelados[passo.id]);
+                  const proximoARevelar = passosNormalizados.find(p => !blocosRevelados[p.id]);
+                  const ehProximoSugerido = !revelado && proximoARevelar?.id === passo.id;
 
                   return (
-                    <div key={bloco.id} className="relative">
-                      {/* Linha Conectora da Linha do Tempo */}
-                      {!ehPrimeiro && (
-                        <div className="flex items-center justify-center my-1.5 select-none">
-                          <div className="flex items-center gap-1.5 text-blue-500 bg-blue-50/80 px-2 py-0.5 rounded-full border border-blue-200/50 shadow-3xs">
-                            <ArrowRight className="w-3 h-3 rotate-90 stroke-[2.5]" />
-                            <span className="text-[9px] font-extrabold uppercase tracking-wider text-blue-800">
-                              Próxima Etapa
-                            </span>
-                          </div>
+                    <div key={passo.id || `vo-passo-${idx}`} className="relative">
+                      {idx > 0 && (
+                        <div className="flex justify-center py-0.5 select-none">
+                          <div className={`w-0.5 h-3 rounded-full transition-colors ${revelado ? 'bg-emerald-300' : 'bg-slate-200'}`} />
                         </div>
                       )}
 
-                      <div
-                        onClick={() => toggleMascara(bloco.id)}
-                        className={`relative p-3.5 sm:p-4 rounded-2xl border transition-all cursor-pointer select-none active:scale-[0.99] ${
+                      <button
+                        type="button"
+                        onClick={() => toggleMascara(passo.id)}
+                        className={`w-full p-3.5 sm:p-4 rounded-2xl border text-left transition-all cursor-pointer select-none active:scale-[0.99] ${
                           revelado
-                            ? 'bg-white border-blue-200 shadow-xs hover:border-blue-300'
-                            : 'bg-gradient-to-r from-blue-700 via-indigo-700 to-indigo-800 border-indigo-700 text-white shadow-sm hover:brightness-105'
+                            ? 'bg-white border-emerald-300 shadow-2xs'
+                            : ehProximoSugerido
+                              ? 'bg-blue-600 hover:bg-blue-700 border-blue-700 text-white shadow-sm ring-2 ring-blue-400/30'
+                              : 'bg-slate-100 hover:bg-slate-200/80 border-slate-200/90 text-slate-600'
                         }`}
                       >
-                        <div className="flex items-center justify-between gap-2 border-b border-black/5 pb-2">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className={`w-5 h-5 rounded-lg text-[10px] font-black flex items-center justify-center shrink-0 ${
-                              revelado ? 'bg-blue-600 text-white shadow-3xs' : 'bg-white/20 text-white'
-                            }`}>
-                              {idx + 1}
+                        {revelado ? (
+                          <div className="flex items-start gap-3">
+                            <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white text-xs font-black flex items-center justify-center shrink-0 mt-0.5 shadow-3xs">
+                              {passo.numero}
                             </span>
-                            <span className={`text-[11px] font-bold uppercase tracking-wider truncate ${
-                              revelado ? 'text-blue-700' : 'text-indigo-200'
-                            }`}>
-                              {bloco.dica
-                                ? bloco.dica.replace(/^(\d+[\.\-\)]\s*|etapa\s*#?\d+[\:\-\.]?\s*)/i, '')
-                                : `Etapa ${idx + 1}`}
-                            </span>
-                          </div>
-                          <span className={`text-xs font-semibold shrink-0 ${revelado ? 'text-slate-400' : 'text-indigo-200'}`}>
-                            {revelado ? 'Toque p/ ocultar' : 'Toque p/ revelar'}
-                          </span>
-                        </div>
-
-                        <div className="mt-2.5">
-                          {revelado ? (
-                            <div className="text-xs sm:text-[13.5px] leading-relaxed text-slate-900 animate-in fade-in duration-150">
-                              <FormattedClinicalText text={(bloco.textoOculto || '').replace(/^\[.*?\]:\s*/, '')} />
+                            <div className="flex-1 min-w-0 space-y-1">
+                              {passo.titulo && (
+                                <p className="text-xs sm:text-sm font-bold text-slate-900 leading-snug">
+                                  {passo.titulo}
+                                </p>
+                              )}
+                              <div className={`text-xs sm:text-[13.5px] leading-relaxed ${passo.titulo ? 'text-slate-700' : 'text-slate-900 font-medium'}`}>
+                                <FormattedClinicalText text={passo.conteudo} />
+                              </div>
                             </div>
-                          ) : (
-                            <div className="flex items-center gap-2 py-1.5 text-white">
-                              <span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
-                              <span className="text-xs sm:text-[13px] font-bold tracking-wide">
-                                [ Conduta / Etapa Ocluída • Toque para Revelar ]
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between gap-2 py-0.5">
+                            <div className="flex items-center gap-2.5">
+                              <span className={`w-6 h-6 rounded-lg text-xs font-black flex items-center justify-center shrink-0 ${
+                                ehProximoSugerido
+                                  ? 'bg-white/20 text-white'
+                                  : 'bg-slate-200/90 text-slate-600'
+                              }`}>
+                                {passo.numero}
+                              </span>
+                              <span className={`text-xs sm:text-sm font-bold ${
+                                ehProximoSugerido ? 'text-white' : 'text-slate-600'
+                              }`}>
+                                Passo {passo.numero}
                               </span>
                             </div>
-                          )}
-                        </div>
-                      </div>
+                            <span className={`text-[11px] font-semibold flex items-center gap-1.5 ${
+                              ehProximoSugerido ? 'text-blue-100' : 'text-slate-400'
+                            }`}>
+                              {ehProximoSugerido && (
+                                <span className="w-2 h-2 rounded-full bg-amber-300 animate-pulse" />
+                              )}
+                              <span>{ehProximoSugerido ? 'Toque para revelar' : 'Ocluído'}</span>
+                            </span>
+                          </div>
+                        )}
+                      </button>
                     </div>
                   );
                 })}

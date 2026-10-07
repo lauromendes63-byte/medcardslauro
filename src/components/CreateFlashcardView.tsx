@@ -35,8 +35,10 @@ import { ImageOcclusionEditor } from './ImageOcclusionEditor';
 import { VisualClozeEditor } from './VisualClozeEditor';
 import { FlowchartBuilder } from './FlowchartBuilder';
 import { ComplexFlowchartBuilder, PRESETS_FLUXOGRAMAS_COMPLEXOS } from './ComplexFlowchartBuilder';
+import { ComplexFlowchartViewer } from './ComplexFlowchartViewer';
 import { FormattedClinicalText } from './FormattedClinicalText';
 import { ClinicalFormatToolbar } from './ClinicalFormatToolbar';
+import { obterPassosNormalizados, limparPerguntaNorteadora } from '../utils/flowchartNormalizer';
 
 interface CreateFlashcardViewProps {
   eixos: EixoClinico[];
@@ -102,8 +104,8 @@ const TIPOS_CARD_CONFIG: {
   {
     id: 'fluxograma_oclusao',
     rotuloCurto: 'Passo a Passo',
-    rotuloCompleto: 'Fluxograma Linear (Passo a Passo)',
-    descricao: 'Sequência cronológica com critérios e condutas',
+    rotuloCompleto: 'Passo a Passo Sequencial',
+    descricao: 'Pergunta norteadora direta com revelação do Passo 1 até o fim',
     icone: GitFork,
     corBadge: 'bg-indigo-50 text-indigo-800 border-indigo-200',
     corBorder: 'border-indigo-500 ring-indigo-500/20',
@@ -111,9 +113,9 @@ const TIPOS_CARD_CONFIG: {
   },
   {
     id: 'fluxograma_complexo',
-    rotuloCurto: 'Árvore Decisão',
-    rotuloCompleto: 'Fluxograma Complexo (Árvore de Decisão)',
-    descricao: 'Algoritmo ramificado Sim/Não e condutas',
+    rotuloCurto: 'Fluxograma',
+    rotuloCompleto: 'Fluxograma (Diagnóstico / Rastreio / Tratamento)',
+    descricao: 'Revisão completa ou fluxograma visual de decisão clínica',
     icone: Split,
     corBadge: 'bg-emerald-50 text-emerald-800 border-emerald-200',
     corBorder: 'border-emerald-500 ring-emerald-500/20',
@@ -168,19 +170,13 @@ export const CreateFlashcardView: React.FC<CreateFlashcardViewProps> = ({
       if (cardEmEdicao.fluxogramaComplexo) {
         setFluxogramaComplexo(JSON.parse(JSON.stringify(cardEmEdicao.fluxogramaComplexo)));
       }
-      if (cardEmEdicao.algoritmoDecisao?.blocos && cardEmEdicao.algoritmoDecisao.blocos.length > 0) {
-        setBlocosDecisao(cardEmEdicao.algoritmoDecisao.blocos.map(b => ({
-          id: b.id,
-          titulo: b.titulo || '',
-          criterioSeta: b.criterioEntrada || '',
-          condutaOuAcao: (b.descricao || '').replace(/^\[.*?\]:\s*/, '')
-        })));
-      } else if (cardEmEdicao.blocosOclusao && cardEmEdicao.blocosOclusao.length > 0) {
-        setBlocosDecisao(cardEmEdicao.blocosOclusao.map((b, idx) => ({
-          id: b.id || `bo-${idx + 1}`,
-          titulo: b.dica || `Passo ${idx + 1}`,
-          criterioSeta: b.dica || '',
-          condutaOuAcao: (b.textoOculto || '').replace(/^\[.*?\]:\s*/, '')
+      const passosNorm = obterPassosNormalizados(cardEmEdicao);
+      if (passosNorm.length > 0) {
+        setBlocosDecisao(passosNorm.map((p, idx) => ({
+          id: p.id || `b-${idx + 1}`,
+          titulo: p.titulo || '',
+          criterioSeta: '',
+          condutaOuAcao: p.conteudo || '',
         })));
       }
       if (cardEmEdicao.casoClinicoDados) {
@@ -233,35 +229,29 @@ export const CreateFlashcardView: React.FC<CreateFlashcardViewProps> = ({
           titulo: '',
           descricao: '',
           tipo: 'inicio',
-          posicaoX: 60,
-          posicaoY: 60,
           ramos: []
         }
       ]
     };
   });
 
-  // Fluxograma Linear
+  // Passo a Passo Sequencial
   const [blocosDecisao, setBlocosDecisao] = useState<{
     id: string;
     titulo: string;
-    criterioSeta: string;
+    criterioSeta?: string;
     condutaOuAcao: string;
   }[]>(() => {
-    if (cardEmEdicao?.algoritmoDecisao?.blocos && cardEmEdicao.algoritmoDecisao.blocos.length > 0) {
-      return cardEmEdicao.algoritmoDecisao.blocos.map(b => ({
-        id: b.id,
-        titulo: b.titulo || '',
-        criterioSeta: b.criterioEntrada || '',
-        condutaOuAcao: (b.descricao || '').replace(/^\[.*?\]:\s*/, '')
-      }));
-    } else if (cardEmEdicao?.blocosOclusao && cardEmEdicao.blocosOclusao.length > 0) {
-      return cardEmEdicao.blocosOclusao.map((b, idx) => ({
-        id: b.id || `bo-${idx + 1}`,
-        titulo: b.dica || `Passo ${idx + 1}`,
-        criterioSeta: b.dica || '',
-        condutaOuAcao: (b.textoOculto || '').replace(/^\[.*?\]:\s*/, '')
-      }));
+    if (cardEmEdicao) {
+      const passosNorm = obterPassosNormalizados(cardEmEdicao);
+      if (passosNorm.length > 0) {
+        return passosNorm.map((p, idx) => ({
+          id: p.id || `b-${idx + 1}`,
+          titulo: p.titulo || '',
+          criterioSeta: '',
+          condutaOuAcao: p.conteudo || '',
+        }));
+      }
     }
     return [
       { id: 'b-1', titulo: '', criterioSeta: '', condutaOuAcao: '' },
@@ -347,7 +337,7 @@ export const CreateFlashcardView: React.FC<CreateFlashcardViewProps> = ({
     if (tipoCard === 'fluxograma_complexo') {
       const preset = PRESETS_FLUXOGRAMAS_COMPLEXOS[0];
       setTitulo(preset.nome);
-      setPergunta('Reconstrua o algoritmo de triagem e conduta no IAM com e sem supra de ST:');
+      setPergunta('Abordagem diagnóstica e conduta de reperfusão na dor torácica aguda no PS:');
       setFluxogramaComplexo(JSON.parse(JSON.stringify(preset.dados)));
     } else if (tipoCard === 'caso_clinico') {
       setTitulo('Choque Séptico Refratário a Volume no Idoso');
@@ -364,25 +354,25 @@ export const CreateFlashcardView: React.FC<CreateFlashcardViewProps> = ({
       setJustificativaDetalhada('A noradrenalina é o vasopressor de 1ª escolha no choque séptico quando a PAM permanece < 65 mmHg após ressuscitação volêmica adequada.');
     } else if (tipoCard === 'cloze') {
       setTitulo('Tríade de Cushing na Hipertensão Intracraniana');
-      setPergunta('Identifique os três sinais clássicos da herniação iminente:');
+      setPergunta('Quais são os 3 sinais da Tríade de Cushing na hipertensão intracraniana?');
       setTextoCloze('A Tríade de Cushing, indicativa de {{c1::hipertensão intracraniana grave}} com risco iminente de herniação, é composta por: {{c2::Hipertensão arterial sistólica com aumento da pressão de pulso}}, {{c3::Bradicardia}} e {{c4::Irregularidade respiratória / respiração de Cheyne-Stokes}}.');
       setDica('Sinal tardio de comprometimento do tronco encefálico.');
       setNotaExplicativa('A tríade é um reflexo autonômico compensatório à isquemia cerebral difusa.');
     } else if (tipoCard === 'fluxograma_oclusao') {
       setTitulo('Sequência Rápida de Intubação (SRI) - 7 Ps');
-      setPergunta('Descreva o passo a passo cronológico dos 7 Ps na intubação de emergência:');
+      setPergunta('Qual a sequência cronológica dos 7 Ps na intubação orotraqueal de emergência?');
       setBlocosDecisao([
-        { id: 'et-1', titulo: '1. Preparação', criterioSeta: 'Início', condutaOuAcao: 'Checagem de material (laringo, tubo, aspiração, drogas)' },
-        { id: 'et-2', titulo: '2. Pré-oxigenação', criterioSeta: 'Etapa 2', condutaOuAcao: 'Oxigênio a 100% por 3 minutos em máscara com reservatório' },
-        { id: 'et-3', titulo: '3. Pré-tratamento', criterioSeta: 'Etapa 3', condutaOuAcao: 'Fentanil ou Lidocaína se indicação específica (opcional)' },
-        { id: 'et-4', titulo: '4. Paralisia com Sedação', criterioSeta: 'Etapa 4', condutaOuAcao: 'Hipnótico (ex: Etomidato) + Bloqueador (ex: Succinilcolina/Rocurônio)' },
-        { id: 'et-5', titulo: '5. Posicionamento', criterioSeta: 'Etapa 5', condutaOuAcao: 'Posição olfativa (sniffing position)' },
-        { id: 'et-6', titulo: '6. Passagem do Tubo', criterioSeta: 'Etapa 6', condutaOuAcao: 'Laringoscopia direta ou videolaringo + checagem visual e ausculta' },
-        { id: 'et-7', titulo: '7. Pós-Intubação', criterioSeta: 'Final', condutaOuAcao: 'Fixação, capnografia, raio-X de tórax e ventilação mecânica' }
+        { id: 'et-1', titulo: 'Preparação', condutaOuAcao: 'Checagem de material (laringo, tubo, aspiração, drogas e acesso venoso)' },
+        { id: 'et-2', titulo: 'Pré-oxigenação', condutaOuAcao: 'Oxigênio a 100% por 3 a 5 minutos em máscara não reinalante' },
+        { id: 'et-3', titulo: 'Pré-tratamento / Otimização', condutaOuAcao: 'Estabilizar hemodinâmica e considerar Fentanil se indicação específica' },
+        { id: 'et-4', titulo: 'Paralisia com Indução', condutaOuAcao: 'Hipnótico (ex: Etomidato) seguido de bloqueador neuromuscular (ex: Succinilcolina/Rocurônio)' },
+        { id: 'et-5', titulo: 'Posicionamento', condutaOuAcao: 'Posição olfativa (sniffing position) com coxim occipital' },
+        { id: 'et-6', titulo: 'Passagem do Tubo', condutaOuAcao: 'Laringoscopia sob visão direta + insuflação do balonete' },
+        { id: 'et-7', titulo: 'Pós-Intubação', condutaOuAcao: 'Capnografia, ausculta epigástrica/pulmonar, fixação do tubo e sedação contínua' }
       ]);
     } else {
       setTitulo('Critérios de Light para Derrame Pleural Exsudativo');
-      setPergunta('Quais são os 3 critérios de Light e quantos são necessários para classificar o líquido como exsudato?');
+      setPergunta('Quais são os 3 critérios de Light e quantos bastam para definir exsudato pleural?');
       setResposta('Basta preencher pelo menos 1 dos 3 critérios:\n1. Relação Proteína pleural / Proteína sérica > 0,5\n2. Relação LDH pleural / LDH sérico > 0,6\n3. LDH pleural > 2/3 do limite superior da normalidade do LDH sérico.');
       setDica('Glicose e celularidade não entram na definição original de Light.');
       setNotaExplicativa('Critérios de Light possuem alta sensibilidade (~98%) para derrame pleural exsudativo.');
@@ -426,8 +416,8 @@ export const CreateFlashcardView: React.FC<CreateFlashcardViewProps> = ({
     let blocosOclusaoData: BlocoOclusao[] | undefined = undefined;
 
     if (tipoCard === 'fluxograma_complexo') {
-      cardTitulo = cardTitulo || fluxogramaComplexo.titulo || 'Fluxograma Clínico Ramificado';
-      cardPergunta = cardPergunta || 'Navegue pelo algoritmo de decisão e determine a conduta clínica:';
+      cardTitulo = cardTitulo || fluxogramaComplexo.titulo || 'Fluxograma Clínico';
+      cardPergunta = cardPergunta || cardTitulo;
       cardResposta = (fluxogramaComplexo.nos || []).map(n => `• ${n.titulo}${n.descricao ? ': ' + n.descricao : ''}`).join('\n');
     } else if (tipoCard === 'image_occlusion') {
       if (!imagemUrl || mascarasImagem.length === 0) {
@@ -443,31 +433,27 @@ export const CreateFlashcardView: React.FC<CreateFlashcardViewProps> = ({
         return;
       }
       cardTitulo = cardTitulo || 'Oclusão de Texto (Cloze)';
-      cardPergunta = cardPergunta || 'Complete as lacunas clínicas do texto:';
+      cardPergunta = cardPergunta || cardTitulo;
       cardResposta = textoCloze.trim();
     } else if (tipoCard === 'fluxograma_oclusao') {
-      cardTitulo = cardTitulo || 'Fluxograma Linear (Passo a Passo)';
-      cardPergunta = cardPergunta || 'Reconstrua a sequência e condutas da abordagem médica:';
+      cardTitulo = cardTitulo || cardPergunta || 'Passo a Passo Clínico';
+      cardPergunta = cardPergunta || cardTitulo;
       cardResposta = blocosDecisao.map((b, i) => {
-        if (b.criterioSeta && b.criterioSeta.trim()) {
-          return `${i + 1}. [Critério: ${b.criterioSeta}] ➔ ${b.titulo ? `${b.titulo}: ` : ''}${b.condutaOuAcao}`;
-        }
         return `${i + 1}. ${b.titulo ? `${b.titulo}: ` : ''}${b.condutaOuAcao}`;
       }).join('\n');
 
-      const blocos: BlocoFluxogramaDecisao[] = blocosDecisao.map((b, idx) => ({
+      const blocos: BlocoFluxogramaDecisao[] = blocosDecisao.map((b) => ({
         id: b.id,
         titulo: b.titulo,
         descricao: b.condutaOuAcao,
-        tipo: idx === 0 ? 'inicio' : idx === blocosDecisao.length - 1 ? 'conduta' : 'decisao',
-        criterioEntrada: b.criterioSeta || undefined,
+        tipo: 'conduta',
       }));
 
       blocosOclusaoData = blocosDecisao.map((b, idx) => ({
         id: b.id || `bo-${idx + 1}`,
         posicao: { x: 10, y: 15 + idx * 25, largura: 80, altura: 20 },
         textoOculto: b.condutaOuAcao || b.titulo,
-        dica: b.titulo || b.criterioSeta || `Etapa ${idx + 1}`,
+        dica: b.titulo || undefined,
         revelado: false,
       }));
 
@@ -477,7 +463,6 @@ export const CreateFlashcardView: React.FC<CreateFlashcardViewProps> = ({
           id: `ram-${i}`,
           origemId: blocosDecisao[i].id,
           destinoId: blocosDecisao[i + 1].id,
-          criterioCondicional: blocosDecisao[i + 1].criterioSeta || undefined,
         });
       }
 
@@ -492,7 +477,7 @@ export const CreateFlashcardView: React.FC<CreateFlashcardViewProps> = ({
       };
     } else if (tipoCard === 'caso_clinico') {
       cardTitulo = cardTitulo || 'Caso Clínico / Questão';
-      cardPergunta = cardPergunta || 'Analise a vinheta e selecione a conduta correta:';
+      cardPergunta = cardPergunta || 'Qual a conduta mais adequada?';
       cardResposta = opcoes[indiceCorreto] || 'Opção Correta';
     }
 
@@ -1050,72 +1035,104 @@ export const CreateFlashcardView: React.FC<CreateFlashcardViewProps> = ({
                   </div>
                 )}
 
-                {/* 4. TESTE FLUXOGRAMA PASSO A PASSO (OCLUSÃO SEQUENCIAL) */}
+                {/* 4. TESTE PASSO A PASSO (OCLUSÃO SEQUENCIAL DESDE O PASSO 1) */}
                 {tipoCard === 'fluxograma_oclusao' && (
                   <div className="space-y-3.5 text-left">
                     <div className="flex items-center justify-between gap-2 border-b border-slate-200/60 pb-2">
                       <span className="text-[10px] font-semibold text-indigo-800 uppercase tracking-wider bg-indigo-100/70 px-2 py-0.5 rounded-md">
-                        Protocolo Linear • Toque para revelar o passo seguinte
+                        Passo a Passo • Do Passo 1 ao fim
                       </span>
                       <button
                         type="button"
                         onClick={() => setPassosRevelados(new Set())}
                         className="text-[10.5px] font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer"
                       >
-                        Reiniciar Passos
+                        Ocultar Todos
                       </button>
                     </div>
 
-                    <div className="space-y-2">
+                    <div className="p-3 rounded-xl bg-white border border-slate-200 text-xs sm:text-sm font-bold text-slate-900">
+                      <FormattedClinicalText
+                        text={limparPerguntaNorteadora(pergunta, titulo)}
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
                       {blocosDecisao.map((bloco, idx) => {
-                        const isInicio = idx === 0;
-                        const revelado = isInicio || passosRevelados.has(idx);
+                        const revelado = passosRevelados.has(idx);
+                        const proximoIdx = blocosDecisao.findIndex((_, i) => !passosRevelados.has(i));
+                        const ehProximo = !revelado && proximoIdx === idx;
 
                         return (
-                          <div key={bloco.id || idx} className="p-3 bg-white rounded-xl border border-slate-200 shadow-3xs space-y-1.5">
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs font-semibold text-indigo-900">
-                                {bloco.titulo || `Etapa ${idx + 1}`}
-                              </span>
-                              {bloco.criterioSeta && (
-                                <span className="text-[10.5px] font-medium bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md">
-                                  Critério: {bloco.criterioSeta}
-                                </span>
-                              )}
-                            </div>
-
+                          <button
+                            key={bloco.id || idx}
+                            type="button"
+                            onClick={() => {
+                              const nov = new Set(passosRevelados);
+                              if (nov.has(idx)) nov.delete(idx);
+                              else nov.add(idx);
+                              setPassosRevelados(nov);
+                            }}
+                            className={`w-full p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                              revelado
+                                ? 'bg-white border-emerald-300 shadow-3xs'
+                                : ehProximo
+                                  ? 'bg-blue-600 hover:bg-blue-700 border-blue-700 text-white shadow-xs'
+                                  : 'bg-slate-100 hover:bg-slate-200/80 border-slate-200 text-slate-600'
+                            }`}
+                          >
                             {revelado ? (
-                              <div className="text-xs sm:text-[13px] text-slate-800 font-normal leading-relaxed pt-1 border-t border-slate-100">
-                                <FormattedClinicalText text={bloco.condutaOuAcao} />
+                              <div className="flex items-start gap-2.5">
+                                <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white text-xs font-black flex items-center justify-center shrink-0 mt-0.5">
+                                  {idx + 1}
+                                </span>
+                                <div className="flex-1 min-w-0 space-y-1">
+                                  {bloco.titulo.trim() && (
+                                    <p className="text-xs sm:text-sm font-bold text-slate-900">
+                                      {bloco.titulo}
+                                    </p>
+                                  )}
+                                  <div className="text-xs sm:text-[13px] text-slate-700 leading-relaxed">
+                                    <FormattedClinicalText text={bloco.condutaOuAcao || '(Sem conteúdo)'} />
+                                  </div>
+                                </div>
                               </div>
                             ) : (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const nov = new Set(passosRevelados);
-                                  nov.add(idx);
-                                  setPassosRevelados(nov);
-                                }}
-                                className="w-full py-2 px-3 rounded-lg bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                              >
-                                <Eye className="w-3.5 h-3.5" />
-                                <span>Revelar Conduta Deste Passo</span>
-                              </button>
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <span className={`w-6 h-6 rounded-lg text-xs font-black flex items-center justify-center ${
+                                    ehProximo ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-600'
+                                  }`}>
+                                    {idx + 1}
+                                  </span>
+                                  <span className={`text-xs sm:text-sm font-bold ${ehProximo ? 'text-white' : 'text-slate-600'}`}>
+                                    Passo {idx + 1}
+                                  </span>
+                                </div>
+                                <span className={`text-[11px] font-semibold ${ehProximo ? 'text-blue-100' : 'text-slate-400'}`}>
+                                  {ehProximo ? 'Toque para revelar' : 'Ocluído'}
+                                </span>
+                              </div>
                             )}
-                          </div>
+                          </button>
                         );
                       })}
                     </div>
                   </div>
                 )}
 
-                {/* 5. TESTE FLUXOGRAMA COMPLEXO */}
+                {/* 5. TESTE FLUXOGRAMA */}
                 {tipoCard === 'fluxograma_complexo' && (
-                  <div className="space-y-2 text-left">
+                  <div className="space-y-2.5 text-left">
                     <span className="text-[10px] font-semibold text-emerald-800 uppercase tracking-wider bg-emerald-100/70 px-2 py-0.5 rounded-md">
-                      Árvore de Decisão Interativa
+                      Fluxograma Clínico Interativo
                     </span>
-                    <ComplexFlowchartBuilder dados={fluxogramaComplexo} onChange={setFluxogramaComplexo} />
+                    <ComplexFlowchartViewer
+                      fluxograma={fluxogramaComplexo}
+                      perguntaGatilho={pergunta || titulo}
+                      tituloContexto={titulo}
+                      initialFullScreen={false}
+                    />
                   </div>
                 )}
 
@@ -1499,20 +1516,34 @@ export const CreateFlashcardView: React.FC<CreateFlashcardViewProps> = ({
                 </div>
               )}
 
-              {/* FORMATO 5: FLUXOGRAMA LINEAR (PASSO A PASSO) */}
+              {/* FORMATO 5: PASSO A PASSO SEQUENCIAL */}
               {tipoCard === 'fluxograma_oclusao' && (
                 <div className="space-y-3">
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-slate-700 block">
-                      Título do Fluxograma:
-                    </label>
-                    <input
-                      type="text"
-                      value={titulo}
-                      onChange={(e) => setTitulo(e.target.value)}
-                      placeholder="Ex: Sequência Rápida de Intubação (7 Ps) ou Manejo da PCR"
-                      className="w-full p-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-900 bg-slate-50/40 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-3xs"
-                    />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-slate-700 block">
+                        Título Curto do Card:
+                      </label>
+                      <input
+                        type="text"
+                        value={titulo}
+                        onChange={(e) => setTitulo(e.target.value)}
+                        placeholder="Ex: Sequência Rápida de Intubação (7 Ps)"
+                        className="w-full p-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-900 bg-slate-50/40 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-3xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-slate-700 block">
+                        Tema / Pergunta Norteadora Direta (Opcional):
+                      </label>
+                      <input
+                        type="text"
+                        value={pergunta}
+                        onChange={(e) => setPergunta(e.target.value)}
+                        placeholder="Ex: Qual a ordem correta dos 7 Ps na SRI?"
+                        className="w-full p-2.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-900 bg-slate-50/40 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-3xs"
+                      />
+                    </div>
                   </div>
 
                   <FlowchartBuilder
@@ -1522,33 +1553,35 @@ export const CreateFlashcardView: React.FC<CreateFlashcardViewProps> = ({
                 </div>
               )}
 
-              {/* FORMATO 6: FLUXOGRAMA COMPLEXO (ÁRVORE DE DECISÃO) */}
+              {/* FORMATO 6: FLUXOGRAMA (DIAGNÓSTICO / RASTREIO / TRATAMENTO) */}
               {tipoCard === 'fluxograma_complexo' && (
                 <div className="space-y-3">
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-slate-700 block">
-                      Título do Algoritmo Clínico:
-                    </label>
-                    <input
-                      type="text"
-                      value={titulo}
-                      onChange={(e) => setTitulo(e.target.value)}
-                      placeholder="Ex: Abordagem da Dor Torácica Aguda no Pronto-Socorro"
-                      className="w-full p-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-900 bg-slate-50/40 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-3xs"
-                    />
-                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-slate-700 block">
+                        Título do Fluxograma:
+                      </label>
+                      <input
+                        type="text"
+                        value={titulo}
+                        onChange={(e) => setTitulo(e.target.value)}
+                        placeholder="Ex: Fluxograma Diagnóstico de Dor Torácica no PS"
+                        className="w-full p-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-900 bg-slate-50/40 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-3xs"
+                      />
+                    </div>
 
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-slate-700 block">
-                      Cenário Clínico & Pergunta Gatilho (Contexto do Algoritmo): *
-                    </label>
-                    <textarea
-                      value={pergunta}
-                      onChange={(e) => setPergunta(e.target.value)}
-                      placeholder="Ex: Paciente de 8 anos com dor óssea aguda e febre alta: determine o fluxo fisiopatológico, as etapas de isquemia cortical e as condutas imediatas."
-                      rows={2}
-                      className="w-full p-2.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-900 bg-slate-50/40 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-3xs"
-                    />
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-slate-700 block">
+                        Tema / Pergunta Norteadora Direta (Opcional):
+                      </label>
+                      <input
+                        type="text"
+                        value={pergunta}
+                        onChange={(e) => setPergunta(e.target.value)}
+                        placeholder="Ex: Abordagem diagnóstica e reperfusão na SCA:"
+                        className="w-full p-2.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-900 bg-slate-50/40 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-3xs"
+                      />
+                    </div>
                   </div>
 
                   <div className="pt-1">

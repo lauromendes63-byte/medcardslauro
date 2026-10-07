@@ -10,7 +10,7 @@ export interface VersionInfo {
   releaseNotes?: string;
 }
 
-export const CURRENT_APP_VERSION = '2.1.0';
+export const CURRENT_APP_VERSION = '2.5.0';
 export const CURRENT_BUILD_TIMESTAMP = typeof __APP_BUILD_TIMESTAMP__ !== 'undefined' ? __APP_BUILD_TIMESTAMP__ : '2026-09-23T15:30:00.000Z';
 export const CURRENT_BUILD_LABEL = typeof __APP_BUILD_LABEL__ !== 'undefined' ? __APP_BUILD_LABEL__ : '23/09/2026 às 12:30';
 

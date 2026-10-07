@@ -16,7 +16,7 @@ interface FormattedClinicalTextProps {
  * - Linhas de Alerta (⚠️) e Pontos de Ouro (⭐) destacados em caixas de foco
  * - Tópicos e marcadores (•, -, *, 1., 2.) com recuo e tipografia nítida
  */
-export const FormattedClinicalText: React.FC<FormattedClinicalTextProps> = ({
+export const FormattedClinicalText: React.FC<FormattedClinicalTextProps> = React.memo(({
   text,
   className = '',
 }) => {
@@ -39,13 +39,13 @@ export const FormattedClinicalText: React.FC<FormattedClinicalTextProps> = ({
       // 0. Seta de Sequência Clínica: --> ou ->
       if (/^\s*(-->|->)\s*$/.test(part)) {
         return (
-          <span key={key} className="text-blue-600 font-bold mx-1.5 select-none text-xs sm:text-sm inline-block">
+          <span key={key} className="text-slate-400 font-semibold mx-1.5 select-none text-xs sm:text-sm inline-block">
             ➔
           </span>
         );
       }
 
-      // 1. Grifado / Marca-texto Amarelo: ==texto==, <mark>texto</mark>, [amarelo]texto[/amarelo]
+      // 1. Grifado / Marca-texto Amarelo Suave: ==texto==, <mark>texto</mark>, [amarelo]texto[/amarelo]
       if (
         (part.startsWith('==') && part.endsWith('==') && part.length >= 4) ||
         (part.startsWith('<mark>') && part.endsWith('</mark>')) ||
@@ -61,14 +61,14 @@ export const FormattedClinicalText: React.FC<FormattedClinicalTextProps> = ({
         return (
           <mark
             key={key}
-            className="bg-amber-200/90 text-amber-950 font-normal px-1.5 py-0.5 rounded shadow-3xs tracking-normal mx-0.5 border border-amber-300/80 inline [box-decoration-break:clone] [-webkit-box-decoration-break:clone] [&_strong]:font-semibold [&_strong]:text-amber-950 [&_strong]:underline [&_strong]:decoration-amber-600/50 [&_strong]:decoration-1 [&_strong]:underline-offset-2"
+            className="bg-amber-100/90 text-amber-950 font-medium px-1.5 py-0.5 rounded-[5px] tracking-normal mx-0.5 border border-amber-200/70 inline [box-decoration-break:clone] [-webkit-box-decoration-break:clone] [&_strong]:font-semibold [&_strong]:text-amber-950"
           >
             {renderInlineFormatted(clean, depth + 1)}
           </mark>
         );
       }
 
-      // 2. Destaque Azul: [azul]texto[/azul], <blue>texto</blue>, etc.
+      // 2. Destaque Azul (Exames / Escalas): [azul]texto[/azul], <blue>texto</blue>, etc.
       if (
         (part.startsWith('[azul]') && part.endsWith('[/azul]')) ||
         (part.startsWith('[blue]') && part.endsWith('[/blue]')) ||
@@ -86,14 +86,14 @@ export const FormattedClinicalText: React.FC<FormattedClinicalTextProps> = ({
         return (
           <span
             key={key}
-            className="font-normal text-blue-900 bg-blue-50/95 px-1.5 py-0.5 rounded-md border border-blue-200/90 shadow-3xs mx-0.5 inline [box-decoration-break:clone] [-webkit-box-decoration-break:clone] [&_strong]:font-semibold [&_strong]:text-blue-950 [&_strong]:underline [&_strong]:decoration-blue-400/50"
+            className="font-medium text-sky-900 bg-sky-50/90 px-1.5 py-0.5 rounded-[5px] border border-sky-200/60 mx-0.5 inline [box-decoration-break:clone] [-webkit-box-decoration-break:clone] [&_strong]:font-semibold [&_strong]:text-sky-950"
           >
             {renderInlineFormatted(clean, depth + 1)}
           </span>
         );
       }
 
-      // 3. Destaque Verde: [verde]texto[/verde], <green>texto</green>, etc.
+      // 3. Destaque Verde (Fármacos / Doses / Condutas): [verde]texto[/verde], <green>texto</green>, etc.
       if (
         (part.startsWith('[verde]') && part.endsWith('[/verde]')) ||
         (part.startsWith('[green]') && part.endsWith('[/green]')) ||
@@ -111,14 +111,14 @@ export const FormattedClinicalText: React.FC<FormattedClinicalTextProps> = ({
         return (
           <span
             key={key}
-            className="font-normal text-emerald-900 bg-emerald-50/95 px-1.5 py-0.5 rounded-md border border-emerald-200/90 shadow-3xs mx-0.5 inline [box-decoration-break:clone] [-webkit-box-decoration-break:clone] [&_strong]:font-semibold [&_strong]:text-emerald-950 [&_strong]:underline [&_strong]:decoration-emerald-400/50"
+            className="font-medium text-emerald-900 bg-emerald-50/90 px-1.5 py-0.5 rounded-[5px] border border-emerald-200/60 mx-0.5 inline [box-decoration-break:clone] [-webkit-box-decoration-break:clone] [&_strong]:font-semibold [&_strong]:text-emerald-950"
           >
             {renderInlineFormatted(clean, depth + 1)}
           </span>
         );
       }
 
-      // 4. Destaque Vermelho: [vermelho]texto[/vermelho], <red>texto</red>, etc.
+      // 4. Destaque Vermelho (Red Flags / Contraindicações): [vermelho]texto[/vermelho], <red>texto</red>, etc.
       if (
         (part.startsWith('[vermelho]') && part.endsWith('[/vermelho]')) ||
         (part.startsWith('[red]') && part.endsWith('[/red]')) ||
@@ -136,7 +136,7 @@ export const FormattedClinicalText: React.FC<FormattedClinicalTextProps> = ({
         return (
           <span
             key={key}
-            className="font-normal text-rose-900 bg-rose-50/95 px-1.5 py-0.5 rounded-md border border-rose-200/90 shadow-3xs mx-0.5 inline [box-decoration-break:clone] [-webkit-box-decoration-break:clone] [&_strong]:font-semibold [&_strong]:text-rose-950 [&_strong]:underline [&_strong]:decoration-rose-400/50"
+            className="font-medium text-rose-900 bg-rose-50/90 px-1.5 py-0.5 rounded-[5px] border border-rose-200/60 mx-0.5 inline [box-decoration-break:clone] [-webkit-box-decoration-break:clone] [&_strong]:font-semibold [&_strong]:text-rose-950"
           >
             {renderInlineFormatted(clean, depth + 1)}
           </span>
@@ -152,7 +152,7 @@ export const FormattedClinicalText: React.FC<FormattedClinicalTextProps> = ({
         return (
           <span
             key={key}
-            className="font-normal text-purple-900 bg-purple-50/95 px-1.5 py-0.5 rounded-md border border-purple-200/90 shadow-3xs mx-0.5 inline [box-decoration-break:clone] [-webkit-box-decoration-break:clone] [&_strong]:font-semibold [&_strong]:text-purple-950"
+            className="font-medium text-purple-900 bg-purple-50/90 px-1.5 py-0.5 rounded-[5px] border border-purple-200/60 mx-0.5 inline [box-decoration-break:clone] [-webkit-box-decoration-break:clone] [&_strong]:font-semibold [&_strong]:text-purple-950"
           >
             {renderInlineFormatted(clean, depth + 1)}
           </span>
@@ -168,7 +168,7 @@ export const FormattedClinicalText: React.FC<FormattedClinicalTextProps> = ({
         return (
           <span
             key={key}
-            className="font-normal text-amber-950 bg-amber-100/90 px-1.5 py-0.5 rounded-md border border-amber-300 shadow-3xs mx-0.5 inline [box-decoration-break:clone] [-webkit-box-decoration-break:clone] [&_strong]:font-semibold [&_strong]:text-amber-950"
+            className="font-medium text-amber-900 bg-orange-50/90 px-1.5 py-0.5 rounded-[5px] border border-orange-200/60 mx-0.5 inline [box-decoration-break:clone] [-webkit-box-decoration-break:clone] [&_strong]:font-semibold [&_strong]:text-amber-950"
           >
             {renderInlineFormatted(clean, depth + 1)}
           </span>
@@ -181,7 +181,7 @@ export const FormattedClinicalText: React.FC<FormattedClinicalTextProps> = ({
         return (
           <code
             key={key}
-            className="font-mono text-[11px] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded border border-slate-200 mx-0.5 font-bold"
+            className="font-mono text-[11.5px] bg-slate-100/90 text-slate-800 px-1.5 py-0.5 rounded border border-slate-200/70 mx-0.5 font-semibold"
           >
             {clean}
           </code>
@@ -206,7 +206,7 @@ export const FormattedClinicalText: React.FC<FormattedClinicalTextProps> = ({
         return (
           <React.Fragment key={key}>
             {leadingSpaces}
-            <strong className="font-semibold text-slate-900 tracking-tight [&_*]:font-semibold">
+            <strong className="font-semibold text-zinc-900 tracking-tight [&_*]:font-semibold">
               {renderInlineFormatted(innerText, depth + 1)}
             </strong>
             {trailingSpaces}
@@ -214,7 +214,7 @@ export const FormattedClinicalText: React.FC<FormattedClinicalTextProps> = ({
         );
       }
 
-      // 5. Sublinhado: <u>texto</u> ou __texto__
+      // 9. Sublinhado: <u>texto</u> ou __texto__
       if (
         (part.startsWith('<u>') && part.endsWith('</u>')) ||
         (part.startsWith('__') && part.endsWith('__') && part.length >= 4)
@@ -223,14 +223,14 @@ export const FormattedClinicalText: React.FC<FormattedClinicalTextProps> = ({
         return (
           <span
             key={key}
-            className="underline decoration-blue-600 decoration-2 underline-offset-3 font-semibold text-slate-900"
+            className="underline decoration-slate-400 decoration-[1.5px] underline-offset-3 font-medium text-zinc-900"
           >
             {renderInlineFormatted(clean, depth + 1)}
           </span>
         );
       }
 
-      // 6. Itálico: *texto*, _texto_, <em>texto</em>
+      // 10. Itálico: *texto*, _texto_, <em>texto</em>
       if (
         (part.startsWith('*') && part.endsWith('*') && part.length >= 2) ||
         (part.startsWith('_') && part.endsWith('_') && part.length >= 2) ||
@@ -241,7 +241,7 @@ export const FormattedClinicalText: React.FC<FormattedClinicalTextProps> = ({
         else if (part.startsWith('_')) clean = part.slice(1, -1);
         else if (part.startsWith('<em>')) clean = part.slice(4, -5);
         return (
-          <em key={key} className="italic text-slate-800 font-normal">
+          <em key={key} className="italic text-zinc-700 font-normal">
             {renderInlineFormatted(clean, depth + 1)}
           </em>
         );
@@ -273,7 +273,7 @@ export const FormattedClinicalText: React.FC<FormattedClinicalTextProps> = ({
         const linhas = bloco.split('\n');
 
         return (
-          <div key={`bloco-${blocoIdx}`} className="space-y-1.5">
+          <div key={`bloco-${blocoIdx}`} className="space-y-2">
             {linhas.map((linha, linhaIdx) => {
               const linhaLimpa = linha.trim();
               if (!linhaLimpa) return null;
@@ -283,9 +283,9 @@ export const FormattedClinicalText: React.FC<FormattedClinicalTextProps> = ({
                 return (
                   <div
                     key={`alerta-${linhaIdx}`}
-                    className="p-2.5 sm:p-3 bg-rose-50/90 rounded-xl border border-rose-200/90 text-rose-900 text-xs sm:text-[13.5px] leading-relaxed flex items-start gap-2 shadow-3xs [&_strong]:font-semibold [&_strong]:text-rose-950"
+                    className="p-3 bg-rose-50/75 rounded-xl border border-rose-200/70 text-rose-900 text-[13.5px] sm:text-[14.5px] leading-[1.62] flex items-start gap-2.5 [&_strong]:font-semibold [&_strong]:text-rose-950"
                   >
-                    <span className="text-base leading-none shrink-0 select-none">⚠️</span>
+                    <span className="text-sm leading-none shrink-0 select-none mt-1">⚠️</span>
                     <div className="flex-1 font-normal">
                       {renderInlineFormatted(linhaLimpa.replace(/^[⚠️🚨]\s*/, ''))}
                     </div>
@@ -298,9 +298,9 @@ export const FormattedClinicalText: React.FC<FormattedClinicalTextProps> = ({
                 return (
                   <div
                     key={`ouro-${linhaIdx}`}
-                    className="p-2.5 sm:p-3 bg-amber-50/90 rounded-xl border border-amber-200/90 text-amber-900 text-xs sm:text-[13.5px] leading-relaxed flex items-start gap-2 shadow-3xs [&_strong]:font-semibold [&_strong]:text-amber-950"
+                    className="p-3 bg-amber-50/75 rounded-xl border border-amber-200/70 text-amber-900 text-[13.5px] sm:text-[14.5px] leading-[1.62] flex items-start gap-2.5 [&_strong]:font-semibold [&_strong]:text-amber-950"
                   >
-                    <span className="text-base leading-none shrink-0 select-none">⭐</span>
+                    <span className="text-sm leading-none shrink-0 select-none mt-1">⭐</span>
                     <div className="flex-1 font-normal">
                       {renderInlineFormatted(linhaLimpa.replace(/^[⭐★📌]\s*/, ''))}
                     </div>
@@ -313,9 +313,9 @@ export const FormattedClinicalText: React.FC<FormattedClinicalTextProps> = ({
                 return (
                   <div
                     key={`dica-${linhaIdx}`}
-                    className="p-2.5 sm:p-3 bg-indigo-50/90 rounded-xl border border-indigo-200/90 text-indigo-900 text-xs sm:text-[13.5px] leading-relaxed flex items-start gap-2 shadow-3xs [&_strong]:font-semibold [&_strong]:text-indigo-950"
+                    className="p-3 bg-indigo-50/70 rounded-xl border border-indigo-200/60 text-indigo-900 text-[13.5px] sm:text-[14.5px] leading-[1.62] flex items-start gap-2.5 [&_strong]:font-semibold [&_strong]:text-indigo-950"
                   >
-                    <span className="text-base leading-none shrink-0 select-none">💡</span>
+                    <span className="text-sm leading-none shrink-0 select-none mt-1">💡</span>
                     <div className="flex-1 font-normal">
                       {renderInlineFormatted(linhaLimpa.replace(/^[💡]\s*/, ''))}
                     </div>
@@ -328,9 +328,9 @@ export const FormattedClinicalText: React.FC<FormattedClinicalTextProps> = ({
                 return (
                   <div
                     key={`conduta-${linhaIdx}`}
-                    className="flex items-start gap-2 pl-1 text-xs sm:text-[13.5px] font-normal text-slate-700 leading-relaxed"
+                    className="flex items-start gap-2 pl-1 text-[13.5px] sm:text-[14.5px] font-normal text-zinc-700 leading-[1.65]"
                   >
-                    <span className="text-blue-600 font-bold text-sm shrink-0 leading-tight">➔</span>
+                    <span className="text-slate-400 font-semibold text-sm shrink-0 leading-normal mt-0.5">➔</span>
                     <div className="flex-1">
                       {renderInlineFormatted(linhaLimpa.replace(/^(➔|->|—>)\s*/, ''))}
                     </div>
@@ -347,12 +347,12 @@ export const FormattedClinicalText: React.FC<FormattedClinicalTextProps> = ({
                 return (
                   <div
                     key={`topico-${linhaIdx}`}
-                    className="flex items-start gap-2 pl-1 text-xs sm:text-[13.5px] text-slate-700 font-normal leading-relaxed"
+                    className="flex items-start gap-2 pl-1 text-[13.5px] sm:text-[14.5px] text-zinc-700 font-normal leading-[1.65]"
                   >
-                    <span className="text-blue-600 font-bold text-xs sm:text-sm shrink-0 select-none leading-normal mt-0.5">
+                    <span className="text-slate-400 font-semibold text-xs sm:text-sm shrink-0 select-none leading-normal mt-1">
                       {marcador === '-' || marcador === '*' ? '•' : marcador}
                     </span>
-                    <div className="flex-1 text-slate-700">
+                    <div className="flex-1 text-zinc-700">
                       {renderInlineFormatted(conteudo)}
                     </div>
                   </div>
@@ -370,18 +370,18 @@ export const FormattedClinicalText: React.FC<FormattedClinicalTextProps> = ({
                 return (
                   <h4
                     key={`hdr-${linhaIdx}`}
-                    className="text-[11.5px] sm:text-xs font-bold text-slate-900 tracking-wider uppercase mt-2.5 mb-1 pb-0.5 border-b border-slate-200/80"
+                    className="text-[11.5px] sm:text-xs font-bold text-zinc-800 tracking-wider uppercase mt-3 mb-1 pb-1 border-b border-zinc-200/70"
                   >
                     {cleanHeader}
                   </h4>
                 );
               }
 
-              // Parágrafo regular de texto clínico com contraste equilibrado e negrito pronunciado
+              // Parágrafo regular de texto clínico com contraste equilibrado e leitura confortável
               return (
                 <p
                   key={`p-${linhaIdx}`}
-                  className="clinical-prose text-xs sm:text-[13.5px] text-slate-700 font-normal leading-relaxed [text-align-last:left]"
+                  className="clinical-prose text-[13.5px] sm:text-[14.5px] text-zinc-700 font-normal leading-[1.66] [text-align-last:left]"
                 >
                   {renderInlineFormatted(linhaLimpa)}
                 </p>
@@ -392,4 +392,5 @@ export const FormattedClinicalText: React.FC<FormattedClinicalTextProps> = ({
       })}
     </div>
   );
-};
+});
+

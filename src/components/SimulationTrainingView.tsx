@@ -41,6 +41,7 @@ import { obterEstiloCorVibrante } from './EixosView';
 import { ComplexFlowchartViewer } from './ComplexFlowchartViewer';
 import { FormattedClinicalText } from './FormattedClinicalText';
 import { EixoEmojiBadge } from './EixoEmojiBadge';
+import { obterPassosNormalizados, limparPerguntaNorteadora } from '../utils/flowchartNormalizer';
 
 interface SimulationTrainingViewProps {
   cards: CardClinico[];
@@ -446,9 +447,9 @@ export const SimulationTrainingView: React.FC<SimulationTrainingViewProps> = ({
   const toggleBlocoFluxo = (blocoId: string) => {
     setBlocosFluxoRevelados(prev => {
       const novo = { ...prev, [blocoId]: !prev[blocoId] };
-      if (!prev[blocoId]) {
-        const blocos = questaoAtual?.algoritmoDecisao?.blocos || questaoAtual?.blocosOclusao || [];
-        if (blocos.length > 0 && blocos.every(b => novo[b.id])) {
+      if (!prev[blocoId] && questaoAtual) {
+        const passos = obterPassosNormalizados(questaoAtual);
+        if (passos.length > 0 && passos.every(p => novo[p.id])) {
           setRevelouVerso(true);
         }
       }
@@ -458,11 +459,8 @@ export const SimulationTrainingView: React.FC<SimulationTrainingViewProps> = ({
 
   const revelarTodosBlocosFluxo = () => {
     const all: Record<string, boolean> = {};
-    if (questaoAtual?.algoritmoDecisao?.blocos) {
-      questaoAtual.algoritmoDecisao.blocos.forEach(b => { all[b.id] = true; });
-    }
-    if (questaoAtual?.blocosOclusao) {
-      questaoAtual.blocosOclusao.forEach(b => { all[b.id] = true; });
+    if (questaoAtual) {
+      obterPassosNormalizados(questaoAtual).forEach(p => { all[p.id] = true; });
     }
     setBlocosFluxoRevelados(all);
     setRevelouVerso(true);
@@ -1425,14 +1423,16 @@ export const SimulationTrainingView: React.FC<SimulationTrainingViewProps> = ({
             </div>
           )}
 
-          {/* MODO 3A: FLUXOGRAMA COMPLEXO (ÁRVORE DE DECISÃO RAMIFICADA) */}
+          {/* MODO 3A: FLUXOGRAMA (REVISÃO VISUAL COMPLETA / DIAGNÓSTICO / RASTREIO / TRATAMENTO) */}
           {isFluxogramaComplexo && (
-            <div className="space-y-2.5 -mx-2 sm:-mx-4">
-              {questaoAtual.perguntaGatilho && (
-                <p className="text-[11px] font-semibold text-slate-800 px-2 sm:px-4">
-                  {questaoAtual.perguntaGatilho}
-                </p>
-              )}
+            <div className="space-y-3">
+              <div className="p-3 sm:p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80">
+                <div className="text-sm sm:text-base font-bold text-slate-900 leading-snug">
+                  <FormattedClinicalText
+                    text={limparPerguntaNorteadora(questaoAtual.perguntaGatilho || (questaoAtual as any).pergunta, questaoAtual.titulo)}
+                  />
+                </div>
+              </div>
 
               <ComplexFlowchartViewer
                 fluxograma={questaoAtual.fluxogramaComplexo || {
@@ -1457,216 +1457,103 @@ export const SimulationTrainingView: React.FC<SimulationTrainingViewProps> = ({
             </div>
           )}
 
-          {/* MODO 3B: FLUXOGRAMA LINEAR & ALGORITMO DE DECISÃO */}
-          {isFluxograma && (
-            <div className="space-y-2.5">
-              <p className="text-[11px] font-semibold text-slate-800">
-                {questaoAtual.perguntaGatilho || 'Identifique as etapas e condutas do algoritmo clínico:'}
-              </p>
+          {/* MODO 3B: PASSO A PASSO SEQUENCIAL (DESDE O PASSO 1 ATÉ O FIM) */}
+          {isFluxograma && (() => {
+            const passos = obterPassosNormalizados(questaoAtual);
+            const perguntaLimpa = limparPerguntaNorteadora(
+              questaoAtual.perguntaGatilho || (questaoAtual as any).pergunta,
+              questaoAtual.titulo
+            );
+            const proximoPasso = passos.find(p => !blocosFluxoRevelados[p.id] && !revelouVerso);
+            const totalRevelados = revelouVerso
+              ? passos.length
+              : passos.filter(p => blocosFluxoRevelados[p.id]).length;
 
-              {/* Algoritmo de Decisão com Ramificações e Critérios Condicionais */}
-              {questaoAtual.algoritmoDecisao && Array.isArray(questaoAtual.algoritmoDecisao.blocos) && questaoAtual.algoritmoDecisao.blocos.length > 0 ? (
-                <div className="p-3 bg-slate-50/80 rounded-2xl border border-slate-200/80 space-y-2">
-                  <div className="flex items-center justify-between pb-1 border-b border-slate-200/60">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 flex items-center gap-1">
-                      <GitFork className="w-3.5 h-3.5" />
-                      <span>{questaoAtual.algoritmoDecisao.titulo || 'Algoritmo de Conduta'}</span>
+            return (
+              <div className="space-y-3">
+                <div className="p-3 sm:p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-center justify-between gap-2 flex-wrap">
+                  <div className="text-sm sm:text-base font-bold text-slate-900 leading-snug flex-1 min-w-0">
+                    <FormattedClinicalText text={perguntaLimpa} />
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-[11px] font-bold text-slate-500 px-2 py-0.5 rounded-full bg-white border border-slate-200">
+                      {totalRevelados}/{passos.length}
                     </span>
                     <button
+                      type="button"
                       onClick={revelarTodosBlocosFluxo}
-                      className="text-[9.5px] font-bold text-indigo-600 hover:text-indigo-800 px-2 py-0.5 rounded bg-white border border-slate-200 cursor-pointer"
+                      className="text-[11px] font-bold text-blue-600 hover:text-blue-800 px-2.5 py-1 rounded-lg bg-white border border-slate-200 cursor-pointer"
                     >
-                      Revelar Respostas
+                      Revelar Tudo
                     </button>
                   </div>
+                </div>
 
-                  <div className="space-y-2 pt-1">
-                    {questaoAtual.algoritmoDecisao.blocos.map((bloco, idx) => {
-                      const revelado = blocosFluxoRevelados[bloco.id] || revelouVerso;
-                      const ramificacao = (questaoAtual.algoritmoDecisao?.ramificacoes || []).find(r => r?.destinoId === bloco.id);
+                <div className="space-y-1.5">
+                  {passos.map((passo, idx) => {
+                    const revelado = Boolean(blocosFluxoRevelados[passo.id] || revelouVerso);
+                    const ehProximoSugerido = !revelado && proximoPasso?.id === passo.id;
 
-                      return (
-                        <div key={bloco.id || `sim-bloco-${idx}`} className="space-y-1">
-                          {/* Seta Conectora entre Etapas */}
-                          {idx > 0 && (
-                            <div className="flex items-center justify-center py-1 select-none">
-                              <div className="flex items-center gap-1.5 text-indigo-400">
-                                <ArrowDown className="w-3.5 h-3.5 stroke-[2.5]" />
-                                {ramificacao?.criterioCondicional && ramificacao.criterioCondicional.trim() ? (
-                                  <span className="text-[9.5px] font-bold text-indigo-800 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-200 shadow-3xs">
-                                    {ramificacao.criterioCondicional}
-                                  </span>
-                                ) : null}
+                    return (
+                      <div key={passo.id || `sim-passo-${idx}`}>
+                        {idx > 0 && (
+                          <div className="flex justify-center py-0.5 select-none">
+                            <div className={`w-0.5 h-2.5 rounded-full transition-colors ${revelado ? 'bg-emerald-300' : 'bg-slate-200'}`} />
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => toggleBlocoFluxo(passo.id)}
+                          className={`w-full p-3 sm:p-3.5 rounded-2xl border text-left transition-all cursor-pointer select-none active:scale-[0.99] ${
+                            revelado
+                              ? 'bg-white border-emerald-300 shadow-2xs'
+                              : ehProximoSugerido
+                                ? 'bg-blue-600 hover:bg-blue-700 border-blue-700 text-white shadow-xs'
+                                : 'bg-slate-100 hover:bg-slate-200/80 border-slate-200 text-slate-600'
+                          }`}
+                        >
+                          {revelado ? (
+                            <div className="flex items-start gap-2.5">
+                              <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white text-xs font-black flex items-center justify-center shrink-0 mt-0.5">
+                                {passo.numero}
+                              </span>
+                              <div className="flex-1 min-w-0 space-y-1">
+                                {passo.titulo && (
+                                  <p className="text-xs sm:text-sm font-bold text-slate-900 leading-snug">
+                                    {passo.titulo}
+                                  </p>
+                                )}
+                                <div className={`text-xs sm:text-[13px] leading-relaxed ${passo.titulo ? 'text-slate-700' : 'text-slate-900 font-medium'}`}>
+                                  <FormattedClinicalText text={passo.conteudo} />
+                                </div>
                               </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2.5">
+                                <span className={`w-6 h-6 rounded-lg text-xs font-black flex items-center justify-center shrink-0 ${
+                                  ehProximoSugerido ? 'bg-white/20 text-white' : 'bg-slate-200/90 text-slate-600'
+                                }`}>
+                                  {passo.numero}
+                                </span>
+                                <span className={`text-xs sm:text-sm font-bold ${ehProximoSugerido ? 'text-white' : 'text-slate-600'}`}>
+                                  Passo {passo.numero}
+                                </span>
+                              </div>
+                              <span className={`text-[11px] font-semibold flex items-center gap-1.5 ${ehProximoSugerido ? 'text-blue-100' : 'text-slate-400'}`}>
+                                {ehProximoSugerido && <span className="w-2 h-2 rounded-full bg-amber-300 animate-pulse" />}
+                                <span>{ehProximoSugerido ? 'Toque para revelar' : 'Ocluído'}</span>
+                              </span>
                             </div>
                           )}
-
-                          {/* Bloco da Etapa */}
-                          <div
-                            onClick={() => toggleBlocoFluxo(bloco.id)}
-                            className={`p-3 rounded-2xl border text-left transition-all cursor-pointer select-none active:scale-[0.99] ${
-                              bloco.tipo === 'inicio'
-                                ? 'bg-blue-50/80 border-blue-200 text-blue-950 shadow-2xs'
-                                : revelado
-                                  ? 'bg-white border-emerald-300 shadow-2xs'
-                                  : 'bg-indigo-600 border-indigo-700 text-white shadow-xs hover:bg-indigo-500'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between gap-1.5 mb-1">
-                              <span className={`text-[9.5px] font-bold uppercase tracking-wider ${
-                                bloco.tipo === 'inicio' 
-                                  ? 'text-blue-600' 
-                                  : revelado 
-                                    ? 'text-emerald-700' 
-                                    : 'text-indigo-200'
-                              }`}>
-                                Etapa #{idx + 1} • {(bloco.tipo || 'conduta').toUpperCase()}
-                              </span>
-                              {bloco.tipo !== 'inicio' && (
-                                <span className="text-[9.5px] opacity-80 font-medium">
-                                  {revelado ? 'Toque p/ ocultar' : 'Toque p/ revelar'}
-                                </span>
-                              )}
-                            </div>
-
-                            <div className="mt-1">
-                              {bloco.tipo === 'inicio' || revelado ? (
-                                <div className="space-y-1.5">
-                                  <p className="text-xs sm:text-sm font-bold text-slate-900 leading-snug">
-                                    {bloco.titulo}
-                                  </p>
-                                  {bloco.descricao && (
-                                    <div className="pt-1.5 border-t border-slate-100/90 text-xs sm:text-[13px] text-slate-700 font-normal leading-relaxed">
-                                      <FormattedClinicalText text={(bloco.descricao || '').replace(/^\[.*?\]:\s*/, '')} />
-                                    </div>
-                                  )}
-                                </div>
-                              ) : (
-                                <div className="space-y-1 py-0.5">
-                                  <p className="text-xs sm:text-sm font-bold text-white/95 leading-snug">
-                                    {bloco.titulo}
-                                  </p>
-                                  <div className="flex items-center gap-2 pt-0.5">
-                                    <span className="w-2 h-2 rounded-full bg-indigo-300 animate-pulse" />
-                                    <span className="text-xs font-bold text-indigo-100 tracking-wide">
-                                      [ Resposta Oculta - Toque para Revelar ]
-                                    </span>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
-              ) : questaoAtual.etapasFluxograma && Array.isArray(questaoAtual.etapasFluxograma) && questaoAtual.etapasFluxograma.length > 0 ? (
-                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2">
-                  <div className="flex items-center justify-between pb-1 border-b border-slate-200/60">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-700">
-                      Etapas do Fluxo Clínico
-                    </span>
-                    <button
-                      onClick={revelarTodosBlocosFluxo}
-                      className="text-[9.5px] font-bold text-indigo-600 hover:text-indigo-800 px-2 py-0.5 rounded bg-white border border-slate-200 cursor-pointer"
-                    >
-                      Revelar Todos
-                    </button>
-                  </div>
-
-                  <div className="space-y-1.5 pt-1">
-                    {questaoAtual.etapasFluxograma.map((etapa, idx) => {
-                      const revelado = blocosFluxoRevelados[etapa.id] || revelouVerso;
-                      return (
-                        <div
-                          key={etapa.id || `sim-etapa-${idx}`}
-                          onClick={() => toggleBlocoFluxo(etapa.id)}
-                          className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer select-none active:scale-[0.99] ${
-                            revelado
-                              ? 'bg-white border-emerald-300 shadow-2xs'
-                              : 'bg-indigo-600 border-indigo-700 text-white shadow-xs hover:bg-indigo-500'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className={`text-[9px] font-bold uppercase ${revelado ? 'text-emerald-700' : 'text-indigo-200'}`}>
-                              Etapa #{idx + 1} {etapa.titulo && `• ${etapa.titulo}`} {etapa.dica && `(${etapa.dica})`}
-                            </span>
-                            <span className="text-[9px] opacity-80">
-                              {revelado ? 'Toque p/ ocultar' : 'Toque p/ revelar'}
-                            </span>
-                          </div>
-                          <div className="mt-1">
-                            {revelado ? (
-                              <div className="text-xs sm:text-[13px] text-slate-700 font-normal leading-relaxed">
-                                <FormattedClinicalText text={(etapa.conteudoOculto || etapa.titulo || '').replace(/^\[.*?\]:\s*/, '')} />
-                              </div>
-                            ) : (
-                              <span className="text-xs font-bold text-white tracking-wide">
-                                [ Resposta Oculta - Toque para Revelar ]
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ) : (
-                /* Modo Etapas em Blocos de Oclusão */
-                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2">
-                  <div className="flex items-center justify-between pb-1 border-b border-slate-200/60">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-700">
-                      Etapas do Fluxo Clínico
-                    </span>
-                    <button
-                      onClick={revelarTodosBlocosFluxo}
-                      className="text-[9.5px] font-bold text-indigo-600 hover:text-indigo-800 px-2 py-0.5 rounded bg-white border border-slate-200 cursor-pointer"
-                    >
-                      Revelar Todos
-                    </button>
-                  </div>
-
-                  <div className="space-y-1.5 pt-1">
-                    {(questaoAtual.blocosOclusao || []).map((bloco, idx) => {
-                      const revelado = blocosFluxoRevelados[bloco.id] || revelouVerso;
-                      return (
-                        <div
-                          key={bloco.id || `sim-oc-${idx}`}
-                          onClick={() => toggleBlocoFluxo(bloco.id)}
-                          className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer select-none active:scale-[0.99] ${
-                            revelado
-                              ? 'bg-white border-emerald-300 shadow-2xs'
-                              : 'bg-indigo-600 border-indigo-700 text-white shadow-xs hover:bg-indigo-500'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className={`text-[9px] font-bold uppercase ${revelado ? 'text-emerald-700' : 'text-indigo-200'}`}>
-                              Etapa #{idx + 1} {exibirDicas && bloco.dica && `• ${bloco.dica.replace(/^(\d+[\.\-\)]\s*|etapa\s*#?\d+[\:\-\.]?\s*)/i, '')}`}
-                            </span>
-                            <span className="text-[9px] opacity-80">
-                              {revelado ? 'Toque p/ ocultar' : 'Toque p/ revelar'}
-                            </span>
-                          </div>
-                          <div className="mt-1">
-                            {revelado ? (
-                              <div className="text-xs sm:text-[13px] leading-snug">
-                                <FormattedClinicalText text={(bloco.textoOculto || '').replace(/^\[.*?\]:\s*/, '')} />
-                              </div>
-                            ) : (
-                              <span className="text-xs font-bold text-white tracking-wide">
-                                [ Etapa Oculta - Toque para Revelar ]
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+              </div>
+            );
+          })()}
 
           {/* MODO 4: CLOZE (OMISSÃO DE PALAVRAS COM CLIQUE INTERATIVO) */}
           {isCloze && (
@@ -1720,7 +1607,7 @@ export const SimulationTrainingView: React.FC<SimulationTrainingViewProps> = ({
           )}
 
           {/* MODO 5: PADRÃO / CONCEITO (FRENTE E VERSO BÁSICO) */}
-          {!isCaso && !isImageOcclusion && !isCloze && !isFluxograma && (
+          {!isCaso && !isImageOcclusion && !isCloze && !isFluxograma && !isFluxogramaComplexo && (
             <div className="space-y-2">
               <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 min-h-16 flex items-center justify-center text-center">
                 <p className="text-xs sm:text-[13px] font-semibold text-slate-800 leading-relaxed max-w-xl mx-auto">
@@ -1735,35 +1622,69 @@ export const SimulationTrainingView: React.FC<SimulationTrainingViewProps> = ({
             <div className="pt-1">
               {!revelouVerso ? (
                 <button
-                  onClick={() => setRevelouVerso(true)}
+                  onClick={() => {
+                    if (isFluxograma) {
+                      const passos = obterPassosNormalizados(questaoAtual);
+                      const proximo = passos.find(p => !blocosFluxoRevelados[p.id]);
+                      if (proximo) {
+                        toggleBlocoFluxo(proximo.id);
+                        return;
+                      }
+                    }
+                    setRevelouVerso(true);
+                  }}
                   className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-2xs transition-transform duration-100 ease-out active:scale-[0.98] cursor-pointer flex items-center justify-center gap-1.5"
                 >
                   <Eye className="w-3.5 h-3.5" strokeWidth={1.75} />
-                  <span>Ver Resposta Esperada</span>
+                  <span>
+                    {isFluxograma
+                      ? (() => {
+                          const passos = obterPassosNormalizados(questaoAtual);
+                          const proximo = passos.find(p => !blocosFluxoRevelados[p.id]);
+                          return proximo ? `Revelar Passo ${proximo.numero} (${proximo.numero}/${passos.length})` : 'Concluir Revisão dos Passos';
+                        })()
+                      : isFluxogramaComplexo
+                        ? 'Revelar Fluxograma Completo'
+                        : 'Ver Resposta Esperada'}
+                  </span>
                 </button>
               ) : (
                 <div className="space-y-2.5 animate-in fade-in">
-                  <div className="-mx-3 sm:-mx-5 px-3 sm:px-5 py-3 sm:py-3.5 bg-blue-50/20 border-t-2 border-b border-blue-200/80 text-slate-900 space-y-2.5">
-                    <div className="text-center pb-1.5 border-b border-blue-100/90">
-                      <span className="text-blue-900 text-xs sm:text-[13px] uppercase font-bold tracking-wider inline-block">
-                        Resposta Esperada
-                      </span>
-                    </div>
-                    <FormattedClinicalText text={questaoAtual.resposta} />
-                    {questaoAtual.perolaClinica && (
-                      <div className="mt-2.5 p-2.5 sm:p-3 bg-amber-100/90 rounded-xl border-2 border-amber-300/90 text-slate-950 flex items-start gap-2 shadow-3xs">
-                        <span className="text-amber-700 font-bold shrink-0 select-none text-sm mt-0.5">💡</span>
-                        <div className="flex-1 min-w-0 text-left">
-                          <span className="font-black text-amber-900 uppercase tracking-wider text-[10px] sm:text-[10.5px] mr-1.5 inline-block">
-                            Dica:
-                          </span>
-                          <span className="font-semibold text-slate-900 text-xs sm:text-[12.5px] leading-relaxed">
-                            {questaoAtual.perolaClinica}
-                          </span>
-                        </div>
+                  {(!isFluxograma && !isFluxogramaComplexo) ? (
+                    <div className="-mx-3 sm:-mx-5 px-3 sm:px-5 py-3 sm:py-3.5 bg-blue-50/20 border-t-2 border-b border-blue-200/80 text-slate-900 space-y-2.5">
+                      <div className="text-center pb-1.5 border-b border-blue-100/90">
+                        <span className="text-blue-900 text-xs sm:text-[13px] uppercase font-bold tracking-wider inline-block">
+                          Resposta Esperada
+                        </span>
                       </div>
-                    )}
-                  </div>
+                      <FormattedClinicalText text={questaoAtual.resposta} />
+                      {questaoAtual.perolaClinica && (
+                        <div className="mt-2.5 p-2.5 sm:p-3 bg-amber-100/90 rounded-xl border-2 border-amber-300/90 text-slate-950 flex items-start gap-2 shadow-3xs">
+                          <span className="text-amber-700 font-bold shrink-0 select-none text-sm mt-0.5">💡</span>
+                          <div className="flex-1 min-w-0 text-left">
+                            <span className="font-black text-amber-900 uppercase tracking-wider text-[10px] sm:text-[10.5px] mr-1.5 inline-block">
+                              Dica:
+                            </span>
+                            <span className="font-semibold text-slate-900 text-xs sm:text-[12.5px] leading-relaxed">
+                              {questaoAtual.perolaClinica}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : questaoAtual.perolaClinica ? (
+                    <div className="p-2.5 sm:p-3 bg-amber-100/90 rounded-xl border-2 border-amber-300/90 text-slate-950 flex items-start gap-2 shadow-3xs">
+                      <span className="text-amber-700 font-bold shrink-0 select-none text-sm mt-0.5">💡</span>
+                      <div className="flex-1 min-w-0 text-left">
+                        <span className="font-black text-amber-900 uppercase tracking-wider text-[10px] sm:text-[10.5px] mr-1.5 inline-block">
+                          Dica:
+                        </span>
+                        <span className="font-semibold text-slate-900 text-xs sm:text-[12.5px] leading-relaxed">
+                          {questaoAtual.perolaClinica}
+                        </span>
+                      </div>
+                    </div>
+                  ) : null}
 
                   {((exibirDicas && questaoAtual.mnemonicoOuDica) || questaoAtual.diretrizReferencia) && (
                     <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5 text-[10px] text-slate-500">

@@ -1,6 +1,6 @@
 // MedCards PWA Service Worker (WebAPK Full Support)
 // Versão do Cache
-const CACHE_NAME = 'medcards-pwa-v2.4.6';
+const CACHE_NAME = 'medcards-pwa-v2.5.0';
 
 // Assets fundamentais para cache inicial
 const PRECACHE_ASSETS = [

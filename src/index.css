@@ -1,5 +1,16 @@
 @import "tailwindcss";
 
+:root {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --bg-canvas: #F7F7F5;
+  --bg-surface: #FFFFFF;
+  --border-subtle: #EAEAEA;
+  --text-primary: #18181B;
+  --text-secondary: #3F3F46;
+  --text-muted: #71717A;
+}
+
 html {
   scroll-behavior: smooth;
   -webkit-tap-highlight-color: transparent;
@@ -9,8 +20,8 @@ html {
 
 body {
   font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background-color: #F8FAFC;
-  color: #0F172A;
+  background-color: var(--bg-canvas);
+  color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -29,6 +40,50 @@ body {
   overflow-x: clip;
 }
 
+/* Resposta tátil instantânea no celular (<16ms, apenas transform/opacity na GPU) */
+button,
+[role="button"],
+a,
+input,
+select,
+textarea {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.touch-instant {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  transition:
+    transform 120ms var(--ease-out),
+    background-color 120ms ease-out,
+    border-color 120ms ease-out,
+    color 120ms ease-out,
+    opacity 120ms ease-out;
+}
+
+.touch-instant:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* Entrada suave e instantânea para revelação de verso e troca de cards */
+@keyframes cardRevealSmooth {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.994);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-card-reveal {
+  animation: cardRevealSmooth 150ms var(--ease-out) forwards;
+  will-change: transform, opacity;
+}
+
 /* Ocultar barra de rolagem em carrosséis e pílulas */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
@@ -42,7 +97,6 @@ body {
 .gpu-layer {
   transform: translateZ(0);
   backface-visibility: hidden;
-  perspective: 1000px;
 }
 
 /* Barra de rolagem customizada sutil */
@@ -54,7 +108,7 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(203, 213, 225, 0.6);
+  background: rgba(203, 213, 225, 0.55);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
@@ -68,53 +122,67 @@ body {
   -ms-hyphens: none !important;
 }
 
-/* Tipografia clínica uniforme */
+/* Tipografia clínica uniforme e confortável (sem cansaço visual) */
 .clinical-prose, 
 .clinical-text-block {
   text-align: left;
   text-wrap: pretty;
   word-break: normal;
   overflow-wrap: normal;
+  line-height: 1.65;
+  letter-spacing: -0.008em;
 }
 
-/* Superfícies minimalistas despoluídas */
+/* Superfícies minimalistas despoluídas (editorial clean) */
 .surface-clean {
   background-color: #FFFFFF;
-  border: 1px solid rgba(226, 232, 240, 0.8);
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+  border: 1px solid #EAEAEA;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.025);
 }
 
 .surface-subtle {
-  background-color: rgba(248, 250, 252, 0.8);
-  border: 1px solid rgba(241, 245, 249, 1);
+  background-color: #F7F7F5;
+  border: 1px solid #EFECE6;
 }
 
-/* Calibração de tipografia clínica: negrito nítido e elegante (semibold 600) sem aspecto pesado ou "gordo" */
+/* Modo Papel Quente (Leitura Conforto anti-fadiga visual) */
+.reading-comfort-surface {
+  background-color: #FAF7F2 !important;
+  border-color: #E8E2D7 !important;
+  color: #27241F !important;
+}
+
+.reading-comfort-canvas {
+  background-color: #F3EFE8 !important;
+}
+
+/* Calibração de tipografia clínica: negrito nítido e elegante (semibold 600) sem aspecto pesado */
 strong, b {
   font-weight: 600 !important;
   letter-spacing: -0.01em;
 }
 
-/* Grifo clínico suave */
+/* Grifo clínico suave estilo marcador pastel editorial */
 mark, .clinical-highlight {
-  background-color: #FEF08A;
-  color: #713F12;
+  background-color: #FEF3C7;
+  color: #78350F;
   font-weight: 600;
-  padding: 0.1em 0.35em;
-  border-radius: 0.35rem;
+  padding: 0.08em 0.35em;
+  border-radius: 0.3rem;
 }
 
 /* Texto de flashcards nítido, arejado e de leitura descansada */
 .card-clinical-text {
   font-size: 0.9375rem;
-  line-height: 1.62;
-  letter-spacing: -0.012em;
-  color: #1E293B;
+  line-height: 1.66;
+  letter-spacing: -0.01em;
+  color: #27272A;
 }
 
 .card-clinical-text strong, 
 .card-clinical-text b {
   font-weight: 600 !important;
-  color: #090D16;
+  color: #111827;
 }
+
 

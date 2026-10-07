@@ -28,6 +28,27 @@ interface ClinicalCaseModalProps {
   onExcluirCard?: (cardId: string) => void;
 }
 
+const IsolatedTimerBadge: React.FC<{ paused: boolean; startTime: number }> = React.memo(({ paused, startTime }) => {
+  const [tempoDecorrido, setTempoDecorrido] = useState<number>(0);
+
+  React.useEffect(() => {
+    if (paused) return;
+    const interval = setInterval(() => {
+      setTempoDecorrido(Math.max(1, Math.round((Date.now() - startTime) / 1000)));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [paused, startTime]);
+
+  const min = Math.floor(tempoDecorrido / 60);
+  const seg = tempoDecorrido % 60;
+  return (
+    <div className="flex items-center gap-1 text-[11px] font-mono font-bold text-slate-700 bg-slate-100 px-2 py-1 rounded-xl border border-slate-200">
+      <Clock className="w-3 h-3 text-slate-500" />
+      <span>{`${min}:${seg.toString().padStart(2, '0')}`}</span>
+    </div>
+  );
+});
+
 export const ClinicalCaseModal: React.FC<ClinicalCaseModalProps> = ({
   card,
   onClose,
@@ -37,17 +58,7 @@ export const ClinicalCaseModal: React.FC<ClinicalCaseModalProps> = ({
 }) => {
   const [opcaoSelecionada, setOpcaoSelecionada] = useState<number | null>(null);
   const [tempoInicio] = useState<number>(Date.now());
-  const [tempoDecorrido, setTempoDecorrido] = useState<number>(0);
   const caso = card.casoClinicoDados;
-
-  // Atualiza tempo decorrido a cada segundo enquanto não responder
-  React.useEffect(() => {
-    if (opcaoSelecionada !== null) return;
-    const interval = setInterval(() => {
-      setTempoDecorrido(Math.max(1, Math.round((Date.now() - tempoInicio) / 1000)));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [opcaoSelecionada, tempoInicio]);
 
   const [modalConfirmarExclusao, setModalConfirmarExclusao] = useState(false);
 
@@ -67,28 +78,27 @@ export const ClinicalCaseModal: React.FC<ClinicalCaseModalProps> = ({
   const acertou = opcaoSelecionada === caso.indiceCorreto;
   const letras = ['A', 'B', 'C', 'D', 'E'];
 
-  const formatarTempo = (segundos: number) => {
-    const min = Math.floor(segundos / 60);
-    const seg = segundos % 60;
-    return `${min}:${seg.toString().padStart(2, '0')}`;
-  };
-
   const finalizar = (avaliacao: 'errei' | 'dificil' | 'bom' | 'facil') => {
     const tempoGasto = Math.max(1, Math.round((Date.now() - tempoInicio) / 1000));
-    onRegistrarRevisao(card.id, avaliacao, tempoGasto);
+    const cardId = card.id;
     onClose();
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        onRegistrarRevisao(cardId, avaliacao, tempoGasto);
+      }, 0);
+    });
   };
 
   const perguntaLimpa = extrairPerguntaObjetiva(card.perguntaGatilho, caso.historiaClinica);
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-100/95 backdrop-blur-xs overflow-y-auto min-h-screen text-left flex flex-col justify-start touch-pan-y overscroll-y-contain">
+    <div className="fixed inset-0 z-50 bg-[#F7F7F5] overflow-y-auto min-h-screen text-left flex flex-col justify-start touch-pan-y overscroll-y-contain">
       <div className="w-full max-w-2xl mx-auto px-2 sm:px-4 py-2.5 sm:py-3.5 space-y-2.5 flex-1 flex flex-col pb-[max(2.5rem,env(safe-area-inset-bottom))] animate-in fade-in duration-150">
         
         {/* ================================================================= */}
         {/* BARRA SUPERIOR DEDICADA: 1 LINHA, ALINHADA, SEM SOBREPOSIÇÃO      */}
         {/* ================================================================= */}
-        <div className="bg-white rounded-2xl px-3 py-2 sm:py-2.5 border border-slate-200/90 shadow-2xs flex items-center justify-between gap-2 shrink-0">
+        <div className="bg-white rounded-2xl px-3 py-2 sm:py-2.5 border border-zinc-200/80 shadow-2xs flex items-center justify-between gap-2 shrink-0">
           
           {/* Lado Esquerdo: Ícone + Caso Clínico + Especialidade / Tópico */}
           <div className="flex items-center gap-1.5 min-w-0 flex-1">
@@ -108,10 +118,8 @@ export const ClinicalCaseModal: React.FC<ClinicalCaseModalProps> = ({
 
           {/* Centro: Tempo decorrido e Botão de Editar */}
           <div className="flex items-center gap-1.5 shrink-0">
-            <div className="flex items-center gap-1 text-[11px] font-mono font-bold text-slate-700 bg-slate-100 px-2 py-1 rounded-xl border border-slate-200">
-              <Clock className="w-3 h-3 text-slate-500" />
-              <span>{formatarTempo(tempoDecorrido)}</span>
-            </div>
+            <IsolatedTimerBadge paused={respondeu} startTime={tempoInicio} />
+
 
             {onEditarCard && (
               <button

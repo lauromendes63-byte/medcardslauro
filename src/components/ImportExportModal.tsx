@@ -16,6 +16,7 @@ import {
   HelpCircle, 
   Search, 
   Plus, 
+  Minus,
   BookOpen,
   ArrowRight,
   RefreshCw,
@@ -117,142 +118,135 @@ Com base no material médico, diretrizes institucionais, casos de alta complexid
   }
 };
 
-export const gerarPromptCompleto = (foco: FocoInstitucional, quantidadeCards: number = 20): string => {
+export type ModoQuantidadePrompt = 'fixo_20' | 'personalizado' | 'ideal';
+
+export const gerarPromptCompleto = (
+  foco: FocoInstitucional,
+  quantidadeCards: number = 20,
+  modoQuantidade: ModoQuantidadePrompt = 'fixo_20'
+): string => {
   const f = FOCOS_INSTITUCIONAIS[foco];
-  const qtdTotal = Math.max(1, Math.min(100, Math.round(quantidadeCards || 20)));
+  const qtdTotal = modoQuantidade === 'fixo_20'
+    ? 20
+    : Math.max(1, Math.min(150, Math.round(quantidadeCards || 20)));
   const qtdConceito = Math.max(1, Math.round(qtdTotal * 0.45));
   const qtdFluxogramaComplexo = Math.max(1, Math.round(qtdTotal * 0.20));
   const qtdFluxogramaOclusao = Math.max(1, Math.round(qtdTotal * 0.15));
   const qtdCaso = Math.max(1, Math.round(qtdTotal * 0.10));
   const qtdCloze = Math.max(0, qtdTotal - qtdConceito - qtdFluxogramaComplexo - qtdFluxogramaOclusao - qtdCaso);
 
+  const cabecalhoQuantidadeECobertura = modoQuantidade === 'ideal'
+    ? `IMPORTANTE — QUANTIDADE IDEAL DEFINIDA POR VOCÊ (GEMINI) PARA ABORDAR 100% DE TUDO:
+- Analise minuciosamente toda a extensão e densidade clínica do material fornecido do início ao fim.
+- Gere o NÚMERO EXATO DE FLASHCARDS QUE VOCÊ JULGAR "IDEAL" para abordar 100% DE TUDO (sejam 15, 25, 35, 50+ flashcards, sem limite engessado).
+- REGRA DE COBERTURA INTEGRAL: Absolutamente NENHUM tópico, subtópico, critério diagnóstico, classificação, tabela, dose farmacológica, diagnóstico diferencial ou algoritmo de conduta do material pode ficar de fora!`
+    : `IMPORTANTE — META DE ${qtdTotal} FLASHCARDS QUE ABORDEM 100% DE TUDO:
+- Elabore rigorosamente um total exato de ${qtdTotal} flashcards de alto rendimento com base no material fornecido.
+- REGRA DE COBERTURA INTEGRAL (ABORDAR TUDO): Estes ${qtdTotal} flashcards DEVEM ser estrategicamente distribuídos e estruturados para abordar 100% DE TODO O CONTEÚDO do material fornecido do início ao fim, sintetizando e agrupando os conceitos com inteligência clínica para que NENHUM tópico, classificação, critério diagnóstico, dose ou conduta fique de fora!`;
+
+  const blocoDistribuicaoECota = modoQuantidade === 'ideal'
+    ? `DISTRIBUIÇÃO PROPORCIONAL SUGERIDA (SOBRE O TOTAL "IDEAL" DEFINIDO POR VOCÊ PARA ABORDAR TUDO):
+- ~45% Flashcards "conceito" (frente e verso direto ao ponto)
+- ~20% Flashcards "fluxograma_complexo" (fluxogramas fiéis de diagnóstico, rastreio, tratamento ou revisão visual completa)
+- ~15% Flashcards "fluxograma_oclusao" (passo a passo sequencial do Passo 1 até o fim, com todos os passos ocluídos)
+- ~10% Flashcards "caso_clinico" (casos clínicos objetivos de múltipla escolha)
+- ~10% Flashcards "cloze" (lacunas estratégicas {{c1::...}})
+
+COBERTURA 100% EXAUSTIVA (MODO QUANTIDADE IDEAL):
+- Você tem autonomia total para escolher a quantidade ideal de flashcards necessária para esgotar 100% da matéria fornecida sem deixar lacunas e sem criar cards "enche-linguiça".
+- Ao final do array JSON "]", adicione uma linha curta informando:
+  "✅ COBERTURA TOTAL CONCLUÍDA: Foram gerados [N] flashcards (quantidade ideal calculada para cobrir 100% de todos os tópicos deste material)."`
+    : `DISTRIBUIÇÃO SUGERIDA PARA ESTE TEMA (TOTAL EXATO DE ${qtdTotal} FLASHCARDS ABORDANDO TUDO):
+- ${qtdConceito} Flashcards "conceito" (frente e verso direto ao ponto)
+- ${qtdFluxogramaComplexo} Flashcards "fluxograma_complexo" (fluxogramas fiéis de diagnóstico, rastreio, tratamento ou revisão visual completa)
+- ${qtdFluxogramaOclusao} Flashcards "fluxograma_oclusao" (passo a passo sequencial do Passo 1 até o fim, com todos os passos ocluídos)
+- ${qtdCaso} Flashcards "caso_clinico" (casos clínicos objetivos de múltipla escolha)
+- ${qtdCloze} Flashcards "cloze" (lacunas estratégicas {{c1::...}})
+
+QUANTIDADE EXATA (${qtdTotal} CARDS) + COBERTURA DE 100% DO MATERIAL:
+- Você DEVE entregar EXATAMENTE o total solicitado de ${qtdTotal} flashcards no array JSON principal, garantindo que todos os tópicos do material sejam abordados do começo ao fim sem flashcards redundantes ou "enche-linguiça".
+- Caso o material seja extremamente extenso e algum detalhe secundário mereça aprofundamento extra além dos ${qtdTotal} flashcards principais:
+  1. Entregue rigorosamente os ${qtdTotal} flashcards cobrindo 100% dos pilares do tema no JSON.
+  2. Logo após fechar o array JSON "]", adicione uma nota curta:
+     "💡 SUGESTÃO DE COMPLEMENTAÇÃO: Os ${qtdTotal} flashcards acima cobrem todos os pilares da aula. Se desejar aprofundar detalhes extras, gere mais [X] flashcards focados em: [listar subtemas]."`;
+
   return `${f.instrucaoPrompt}
-IMPORTANTE: Elabore rigorosamente um total exato de ${qtdTotal} flashcards de alto rendimento com base no material fornecido.
+${cabecalhoQuantidadeECobertura}
 
 ${f.regraOuroPrompt}
 
-REGRAS DE FORMATAÇÃO E TIPOGRAFIA MÉDICA:
-1. PROIBIÇÃO ABSOLUTA DE COLCHETES PARA SEPARAR ITENS:
+REGRAS PERENES E UNIVERSAIS DE QUALIDADE E FORMATAÇÃO (VÁLIDAS PARA TODOS OS FLASHCARDS):
+1. REGRA PERENE DE PERGUNTAS NORTEADORAS DIRETAS AO PONTO (ZERO ROBÓTICO / ZERO PROLIXIDADE / ZERO ENCHE-LINGUIÇA):
+   - Esta regra é UNIVERSAL e OBRIGATÓRIA para TODOS os tipos de flashcard ("conceito", "fluxograma_oclusao", "fluxograma_complexo", "caso_clinico" e "cloze").
+   - NUNCA crie flashcards desnecessários, malformulados, burocráticos ou "enche-linguiça". Cada flashcard deve ter um propósito clínico real de estudo.
+   - O campo "perguntaGatilho" deve ser SEMPRE um tópico/tema ou pergunta norteadora DIRETA AO PONTO, natural, curta e clara.
+   - ❌ PROIBIDO USAR COMANDOS META-ROBÓTICOS OU PROLIXOS como:
+     • "Reconstrua o algoritmo de decisão propedêutica..."
+     • "Navegue pelo algoritmo e determine..."
+     • "Descreva o passo a passo cronológico..."
+     • "Complete os passos do fluxograma..."
+     • "Como se divide a taxonomia..."
+   - ✅ USE SEMPRE PERGUNTAS OU TÓPICOS NORTEADORES DIRETOS E NATURAIS:
+     • "Sequência Rápida de Intubação (SRI): qual a ordem dos 7 Ps e a conduta em cada passo?"
+     • "Fluxograma diagnóstico e tratamento da Dor Torácica Aguda no PS:"
+     • "Rastreio do Câncer do Colo do Útero (MS): população-alvo, periodicidade e conduta conforme resultado:"
+     • "Quais os sinais da fase precoce da leptospirose e o achado semiológico clássico nas panturrilhas e olhos?"
+
+2. PROIBIÇÃO ABSOLUTA DE COLCHETES PARA SEPARAR ITENS:
    - NUNCA use colchetes [...] para separar itens, títulos, categorias, etapas ou termos nas perguntas ou respostas.
    - Use colchetes APENAS para as tags oficiais de cor do MedCards ([azul], [vermelho], [verde], [roxo], [laranja], [amarelo]), para a sintaxe de cloze {{c1::termo}} ou para arrays JSON [].
    - Para listar ou separar elementos no texto clínico, use marcadores visuais (•), hífens (-), numeração (1., 2.) ou a seta clínica (--> ou ➔).
 
-2. EVITAR PARÊNTESES AO MÁXIMO:
+3. EVITAR PARÊNTESES AO MÁXIMO:
    - Evite o uso de parênteses (...) nas perguntas, respostas e justificativas.
-   - Use parênteses APENAS quando a situação for estritamente necessária (exemplo: indicar que uma conduta ou droga é opcional, como "(opcional)", ou para unidades de dosagem e siglas médicas indispensáveis). No restante, integre o texto de forma fluida e direta sem poluição de parênteses desnecessários.
+   - Use parênteses APENAS quando estritamente necessário (ex: unidades de dosagem, siglas indispensáveis ou indicar "(opcional)").
 
-3. REGRA DE OURO DO CAMPO "topico" (AGRUPAMENTO POR AULA/TEMA CENTRAL):
-   - O campo "topico" deve ser SEMPRE o NOME DA AULA OU TEMA GERAL (ex: "topico": "Osteomielite e Artrite Séptica", "topico": "Arboviroses e Malária", "topico": "Síndrome Coronariana Aguda").
-   - NUNCA crie micro-tópicos fragmentados para cada pergunta ou flashcard (como "Fisiopatologia da osteomielite", "Tratamento da osteomielite", "Classificação de Gustilo"). Todos os cards gerados a partir do mesmo material devem pertencer ao MESMO "topico".
-   - Se o material contiver mais de um grande tema bem distinto (exemplo: aula conjunta com "Dengue", "Chikungunya" e "Malária"), faça o split em no máximo 2 ou 3 tópicos bem delimitados. Jamais disperse os cards em dezenas de tópicos picados que poluem e desorganizam o app!
+4. REGRA DE OURO DO CAMPO "topico" (AGRUPAMENTO POR AULA/TEMA CENTRAL):
+   - O campo "topico" deve ser SEMPRE o NOME DA AULA OU TEMA GERAL (ex: "topico": "Osteomielite e Artrite Séptica", "topico": "Síndrome Coronariana Aguda").
+   - NUNCA crie micro-tópicos fragmentados para cada pergunta. Todos os cards do mesmo material devem pertencer ao MESMO "topico" (ou no máximo 2 a 3 grandes temas se a aula abordar doenças distintas).
 
-4. REGRA DE OURO DO CAMPO "especialidade" (EIXO CLÍNICO PRINCIPAL):
-   - O campo "especialidade" deve ser OBRIGATORIAMENTE preenchido com a grande área ou especialidade médica exata do tema (ex: "Cardiologia", "Infectologia", "Ortopedia", "Pediatria", "Ginecologia e Obstetrícia", "Cirurgia Geral", "Neurologia", "Pneumologia", "Nefrologia", "Gastroenterologia", "Hematologia", "Reumatologia", "Endocrinologia", "Psiquiatria", "Dermatologia", "Medicina de Emergência", "Medicina Preventiva", etc.).
-   - Mantenha a mesma especialidade para todos os flashcards do mesmo lote para organização e detecção precisa no MedCards.
+5. REGRA DE OURO DO CAMPO "especialidade" (EIXO CLÍNICO PRINCIPAL):
+   - Preencha "especialidade" com a especialidade médica exata do tema (ex: "Cardiologia", "Infectologia", "Ortopedia", "Pediatria", "Ginecologia e Obstetrícia", "Cirurgia Geral", "Neurologia", "Pneumologia", "Nefrologia", "Gastroenterologia", "Hematologia", "Reumatologia", "Endocrinologia", "Psiquiatria", "Dermatologia", "Medicina de Emergência", "Medicina Preventiva").
 
-5. FORMULAÇÃO CLÍNICA NATURAL DAS PERGUNTAS (SEM PROLIXIDADE ROBÓTICA):
-   - NUNCA formule perguntas robóticas, artificiais, prolixas ou pedantes.
-   ❌ EVITE formulações artificiais e excessivamente acadêmicas como:
-      - "Como se divide a taxonomia da Leptospira na classificação sorológica clássica e nos subclados genômicos modernos?"
-      - "Quais são os sinais clínicos e o achado semiomarcador clássico da fase precoce septicêmica da leptospirose anictérica?"
-   ✅ ADOTE perguntas diretas, objetivas, de alta relevância prática e padrão prova de residência médica:
-      - "Quais são as principais manifestações da fase precoce da leptospirose e o achado semiológico patognomônico nas panturrilhas e olhos?"
-      - "Paciente com suspeita de leptospirose grave (Doença de Weil): qual a tríade clínica clássica e o esquema antimicrobiano parenteral de escolha?"
-      - "Qual a conduta diagnóstica confirmatória de escolha na 1ª semana versus a partir da 2ª semana de sintomas da leptospirose?"
-   - Linguagem médica limpa, ágil, direta, como em discussões clínicas de plantão e questões do Revalida/ENAMED/USP.
+6. ARQUITETURA VISUAL, CORES E MARCAÇÕES MÉDICAS:
+   Utilize ativamente as marcações nos campos "resposta", "perguntaGatilho", "justificativaDetalhada", nos passos e nos nós dos fluxogramas:
+   • ==termo== ou [amarelo]termo[/amarelo]: Valores de corte numéricos, metas de tempo, doses críticas e escores.
+   • [azul]termo[/azul]: Fármacos de 1ª escolha, condutas prioritárias imediatas e exames padrão-ouro.
+   • [vermelho]termo[/vermelho]: Contraindicações formais absolutas, pegadinhas de prova e Red Flags.
+   • [verde]termo[/verde]: Metas terapêuticas, profilaxias e critérios de alta.
+   • [roxo]termo[/roxo]: Diagnósticos diferenciais e mecanismos fisiopatológicos.
+   • [laranja]termo[/laranja]: Ajustes de dose (ex: insuficiência renal/gestantes) e avisos intermediários.
+   • **negrito**, <u>sublinhado</u> e --> (seta ➔).
+   • Separe blocos de texto por quebras de linha duplas (\\n\\n) — NUNCA gere "textão" corrido.
 
-5. ARQUITETURA VISUAL, CORES E MARCAÇÕES MÉDICAS (CRÍTICO & MANDATÓRIO):
-   O MedCards possui um motor tipográfico clínico proprietário de alto contraste. Para criar uma experiência visual digna de material médico de ponta, você DEVE utilizar ativamente as seguintes marcações nos campos "resposta", "perguntaGatilho", "justificativaDetalhada" e nos nós dos fluxogramas:
-
-   🎨 PALETA DE CORES E DESTAQUES CLÍNICOS:
-   • ==amarelo== ou [amarelo]termo[/amarelo]: MARCA-TEXTO AMARELO VIBRANTE.
-     - Quando usar: Valores de corte numéricos, metas de tempo (ex: tempo porta-balão, metas de PA, dosagens críticas, critérios de escores definidores).
-     - Exemplo: "Meta de PAM ==≥ 65 mmHg== em choque séptico." ou "Delta-T de reperfusão ==< 4,5 horas== no AVC isquêmico."
-
-   • [azul]termo[/azul]: DESTAQUE AZUL CLÍNICO (Conduta Imediata / Padrão-Ouro).
-     - Quando usar: Fármacos de 1ª escolha, condutas prioritárias imediatas e exames diagnósticos padrão-ouro.
-     - Exemplo: "Iniciar [azul]Noradrenalina[/azul] precocemente se refratário a volume." ou "Exame padrão-ouro: [azul]Angiotomografia de Artérias Pulmonares[/azul]."
-
-   • [vermelho]termo[/vermelho]: DESTAQUE VERMELHO ALERTA (Red Flags / Contraindicações).
-     - Quando usar: Contraindicações formais absolutas, pegadinhas frequentes de prova, sinais de alarme ("Red Flags") e risco iminente de morte.
-     - Exemplo: "⚠️ [vermelho]Contraindicação absoluta:[/vermelho] uso de beta-bloqueador em intoxicação por cocaína ou BAV avançado!"
-
-   • [verde]termo[/verde]: DESTAQUE VERDE CLÍNICO (Metas Terapêuticas / Profilaxias / Critérios de Alta).
-     - Quando usar: Metas terapêuticas atingidas, medidas preventivas/profiláticas, sinais de bom prognóstico e critérios de alta segura.
-     - Exemplo: "Profilaxia primária com [verde]Vacinação contra Hepatite B e Tétano[/verde]." ou "Critério de compensação clínica: [verde]Diurese > 0,5 mL/kg/h[/verde]."
-
-   • [roxo]termo[/roxo]: DESTAQUE ROXO / PÚRPURA (Diferenciais & Fisiopatologia).
-     - Quando usar: Diagnósticos diferenciais cruciais, mecanismos fisiopatológicos, etiologias e correlações anatômicas.
-     - Exemplo: "Diferencial obrigatório: [roxo]Dissecção Aguda de Aorta tipo Stanford A[/roxo]."
-
-   • [laranja]termo[/laranja]: DESTAQUE LARANJA ÂMBAR (Avisos Intermediários / Condições Especiais).
-     - Quando usar: Critérios de exclusão relativa, monitorização intermediária e ajustes para gestantes ou insuficiência renal.
-     - Exemplo: "Atenção: [laranja]Ajustar dose para ClCr < 30 mL/min[/laranja] e monitorar função renal."
-
-   🖋️ MARCADORES DE TEXTO E TIPOGRAFIA:
-   • **negrito**: Títulos de seções, parâmetros clínicos, nomes de patologias e doses farmacológicas.
-   • <u>sublinhado</u>: Faixas etárias, grupos de risco e populações especiais (ex: <u>gestantes no 3º trimestre</u>, <u>idosos institucionalizados</u>).
-   • --> ou ->: Transforma-se AUTOMATICAMENTE na seta médica de sequência (➔).
-     - Exemplo: "Dor torácica típica --> ECG em até 10 minutos --> Dosagem de Troponina ultrassensível".
-
-   🔤 OCLUSÃO DE TEXTO (CLOZE):
-   • {{c1::termo_oculto}}: Cria a lacuna interativa nos cards do tipo "cloze".
-     - Exemplo: "A principal causa de abdome agudo cirúrgico no jovem é a {{c1::Apendicite Aguda}}."
-
-   ⚡ EMOJIS ESTRATÉGICOS DE FIXAÇÃO VISUAL:
-   • ⚠️ : No início de linhas com Red Flags, riscos iminentes ou alertas de bancas.
-   • ⭐ : No início de linhas com Regra de Ouro da conduta ou critério diagnóstico definidor.
-   • 💡 : Para mnemônicos, pérolas clínicas e sacadas práticas de prova.
-
-   📐 ARQUITETURA DE RESPOSTA SEM "TEXTÃO":
-   - NUNCA GERAR "TEXTÃO" OU PARÁGRAFO CONTÍNUO: É terminantemente proibido devolver o campo "resposta" ou "justificativaDetalhada" como um bloco denso e ininterrupto de texto.
-   - SEPARAÇÃO POR QUEBRAS DE LINHA DUPLAS (\\n\\n): Separe tópicos e seções por quebras de linha duplas ("enter") para garantir respiro visual e leitura rápida no celular.
-   - SUBTÍTULOS ESTRUTURADOS:
-     • Quando houver etapas ou categorias na conduta, inicie a seção com um subtítulo em maiúsculas terminado em dois-pontos (ex: "ANTIBIOTICOTERAPIA IMEDIATA (1ª HORA):" ou "CRITÉRIOS DE INDICAÇÃO CIRÚRGICA:").
-   - DICA PRÁTICA / PONTO-CHAVE ("dica" ou "perolaClinica"):
-     • Deve ser curta, direta e objetiva (1 a 2 frases no máximo) com o ponto de virada da conduta médica ou da questão.
-
-GRANDE TUTORIAL DOS FORMATOS DO MEDCARDS:
+PAPEL E FORMATO SIMPLIFICADO DE CADA TIPO DE FLASHCARD:
 
 1. CONCEITO DIRETO (tipoCard: "conceito"):
-   - Estrutura: "tipoCard": "conceito", "titulo", "topico", "especialidade", "perguntaGatilho", "resposta", "dica" (ou "perolaClinica").
+   - Pergunta clínica direta ("perguntaGatilho") e resposta estruturada em tópicos ("resposta").
 
-2. FLUXOGRAMA COMPLEXO / ÁRVORE DE DECISÃO RAMIFICADA (tipoCard: "fluxograma_complexo"):
-   - ⚠️ ATENÇÃO MANDATÓRIA AO "perguntaGatilho": 
-     • ❌ PROIBIDO USAR COMANDOS META-ROBÓTICOS PROLIXOS como: "Reconstrua o algoritmo de decisão propedêutica...", "Navegue pelo algoritmo...", "Complete os passos do fluxograma...", "Percorra a árvore...". Isso NÃO é uma pergunta e polui a interface!
-     • ✅ OBRIGATÓRIO FORMULAR UMA PERGUNTA CLÍNICA DIRETA, CONCISA E DESAFIADORA (1 a 2 frases no máximo), como um médico preceptor perguntando no plantão:
-       Exemplos excelentes:
-       - "Suspeita de Osteomielite no PS: qual o exame inicial e qual a conduta se o RX for normal?"
-       - "Dor torácica com Supra de ST no ECG: qual a conduta imediata e o tempo-limite para angioplastia primária vs trombólise?"
-       - "Cetoacidose Diabética: qual o valor de corte do K+ sérico para autorizar o início da insulinoterapia?"
-   - Cada nó deve ter seu tipo ("inicio" | "decisao" | "alerta" | "conduta" | "diagnostico"), "oculto": true (exceto o inicial), e uma "dica" curta que dá a pista para deduzir a conduta daquela etapa.
-   - Os ramos ("ramos") DEVEM conter o "rotulo" da condição clínica de transição (ex: "Se Wells > 4 (Alta probabilidade)", "Se D-Dímero normal (< 500 ng/mL)", "Se instabilidade hemodinâmica") e a "cor": "verde"|"vermelho"|"azul"|"amber"|"roxo".
-   - Estrutura do objeto: "tipoCard": "fluxograma_complexo", "titulo", "topico", "especialidade", "perguntaGatilho", com "fluxogramaComplexo" contendo "noInicialId", "nos" (com "id", "titulo", "descricao", "tipo", "oculto", "dica", "ramos").
+2. PASSO A PASSO SEQUENCIAL (tipoCard: "fluxograma_oclusao"):
+   - PAPEL: Revisar uma sequência ordenada desde o Passo 1 até o final (ex: etapas de um procedimento, sequência cronológica de atendimento, fases clínicas ou linha de tratamento em ordem: 1ª linha ➔ 2ª linha ➔ 3ª linha).
+   - Na revisão, TODOS os passos (inclusive o Passo 1) iniciam ocluídos e são revelados um por um na ordem correta.
+   - ESTRUTURA SIMPLES E DIRETA (sem campos "enche-linguiça"):
+     • "perguntaGatilho": Tópico/tema ou pergunta norteadora direta ao ponto (NUNCA robótica).
+     • "passos": Array ordenado do Passo 1 até o último passo, onde cada item tem apenas "titulo" (subtítulo curto opcional da etapa) e "conduta" (conteúdo objetivo daquele passo).
 
-3. FLUXOGRAMA LINEAR PASSO A PASSO (tipoCard: "fluxograma_oclusao"):
-   - Estrutura: "tipoCard": "fluxograma_oclusao", com "algoritmoDecisao" contendo "blocos" ordenados (com "id", "titulo", "criterioEntrada", "descricao", "tipo": "inicio"|"conduta"|"decisao"|"alerta").
+3. FLUXOGRAMA CLÍNICO (tipoCard: "fluxograma_complexo"):
+   - PAPEL: Serve para uma REVISÃO VISUAL COMPLETA de um tema OU para representar com fidelidade FLUXOGRAMAS DIAGNÓSTICOS, DE RASTREIO (SCREENING) E DE TRATAMENTO (quando há bifurcações "Se Positivo vs Se Negativo", valores de corte, estratificação de risco ou múltiplos caminhos).
+   - ESTRUTURA SIMPLES E FIEL (sem coordenadas X/Y e sem campos burocráticos):
+     • "perguntaGatilho": Tópico ou pergunta norteadora direta (ex: "Fluxograma diagnóstico e de reperfusão na Dor Torácica Aguda:").
+     • "fluxogramaComplexo": contém "noInicialId" e "nos".
+     • Cada nó em "nos" tem apenas: "id", "titulo" (título curto e claro da caixa), "descricao" (conduta/detalhes objetivos da caixa) e "ramos" (array de setas com "rotulo" da condição, "destinoNoId" e "cor": "verde"|"vermelho"|"azul"|"amber"|"roxo").
 
 4. OCLUSÃO DE TEXTO / CLOZE (tipoCard: "cloze"):
-   - Estrutura: "tipoCard": "cloze", com campo "textoCloze" contendo {{c1::termo_oculto}}.
+   - Campo "textoCloze" contendo {{c1::termo_oculto}}.
 
 5. CASO CLÍNICO COM MÚLTIPLA ESCOLHA (tipoCard: "caso_clinico"):
-   - Estrutura: "tipoCard": "caso_clinico", com "casoClinicoDados" contendo "historiaClinica", "exameFisicoSinais", "opcoes" (4 alternativas), "indiceCorreto" (0 a 3) e "justificativaDetalhada".
+   - "casoClinicoDados" contendo "historiaClinica", "exameFisicoSinais", "opcoes" (4 alternativas), "indiceCorreto" (0 a 3) e "justificativaDetalhada".
 
-DISTRIBUIÇÃO SUGERIDA PARA ESTE TEMA (TOTAL EXATO DE ${qtdTotal} FLASHCARDS):
-- ${qtdConceito} Flashcards "conceito" (conceito direto, perguntas gatilho de conduta)
-- ${qtdFluxogramaComplexo} Flashcards "fluxograma_complexo" (árvores de decisão com ramificações)
-- ${qtdFluxogramaOclusao} Flashcards "fluxograma_oclusao" (algoritmos sequenciais passo a passo)
-- ${qtdCaso} Flashcards "caso_clinico" (casos com história clínica, exame físico e alternativas)
-- ${qtdCloze} Flashcards "cloze" (lacunas estratégicas {{c1::...}})
+${blocoDistribuicaoECota}
 
-QUANTIDADE EXATA & SUGESTÃO DE COMPLEMENTAÇÃO:
-- Você DEVE entregar EXATAMENTE o total solicitado de ${qtdTotal} flashcards no array JSON principal.
-- Caso você (IA) julgue que o material fornecido possui conteúdo relevante adicional que não coube nesta cota de ${qtdTotal} flashcards para ficar 100% coberto:
-  1. Entregue rigorosamente os ${qtdTotal} flashcards no JSON.
-  2. Logo após fechar o array JSON "]", adicione uma nota curta no formato:
-     "💡 SUGESTÃO DE COMPLEMENTAÇÃO: Para cobrir 100% de todos os detalhes desta aula, seria ideal gerar mais [X] flashcards focados em: [listar 2 ou 3 subtemas específicos que ficaram de fora]."
-
-ESTRUTURA JSON EXATA (Retorne APENAS o JSON válido sem nenhum texto explicativo fora dele, exceto a nota de complementação se necessária):
+ESTRUTURA JSON EXATA (Retorne APENAS o JSON válido sem nenhum texto explicativo fora dele, exceto a nota final se aplicável):
 [
   {
     "tipoCard": "conceito",
@@ -260,57 +254,93 @@ ESTRUTURA JSON EXATA (Retorne APENAS o JSON válido sem nenhum texto explicativo
     "titulo": "Critérios Eletrocardiográficos e Metas no IAMCSST",
     "especialidade": "Cardiologia",
     "perguntaGatilho": "Quais os critérios eletrocardiográficos do IAMCSST e as metas de tempo para reperfusão imediata?",
-    "resposta": "**Critérios de Supra de ST no Ponto J (em 2 ou mais derivações contíguas):**\\n\\n• **Derivações gerais:** ==Elevação ≥ 1 mm== em todas derivações (exceto V2-V3).\\n\\n• <u>Nas derivações V2-V3</u>:\\n  - Homens < 40 anos: **≥ 2,5 mm**\\n  - Homens ≥ 40 anos: **≥ 2,0 mm**\\n  - Mulheres: **≥ 1,5 mm**\\n\\n• **Conduta Imediata:** Iniciar dupla antiagregação com [azul]AAS + Ticagrelor[/azul] e anticoagulação plena com [azul]Enoxaparina[/azul].\\n\\n• **Fluxo de Atendimento:** Dor torácica --> ECG em até ==10 minutos== --> Encaminhar para hemodinâmica.\\n\\n• **Metas Terapêuticas:** [verde]Resolução da dor e queda do supra > 50% em 90 min[/verde].\\n\\n• **Diferencial Obrigatório:** Descartar [roxo]Dissecção Aguda de Aorta[/roxo] antes de qualquer trombólise.\\n\\n• **Atenção Especial:** [laranja]Ajustar dose de Enoxaparina se ClCr < 30 mL/min[/laranja].\\n\\n⚠️ **Red Flag:** ⚠️ [vermelho]Contraindicação formal a nitratos:[/vermelho] Infarto de VD (V3R/V4R), PAS < 90 mmHg ou uso recente de inibidores da 5-PDE (Sildenafila)!\\n\\n⭐ **Regra de Ouro:** Tempo porta-balão meta: ==< 90 minutos== (ou ==< 120 min== se transferido).",
-    "perolaClinica": "Tempo porta-agulha para trombólise química com Tenecteplase: meta ==< 30 minutos== se a angioplastia primária não for realizável em até 120 minutos."
+    "resposta": "• **Derivações gerais:** ==Elevação ≥ 1 mm== no ponto J em ≥ 2 derivações contíguas (exceto V2-V3).\\n\\n• <u>Derivações V2-V3</u>: Homens < 40 anos ==≥ 2,5 mm==; Homens ≥ 40 anos ==≥ 2,0 mm==; Mulheres ==≥ 1,5 mm==.\\n\\n• **Conduta Imediata:** [azul]AAS 200 mg + Ticagrelor 180 mg[/azul] e anticoagulação.\\n\\n⚠️ [vermelho]Contraindicação formal a nitratos:[/vermelho] Infarto de VD (V3R/V4R), PAS < 90 mmHg ou uso de Sildenafila.",
+    "perolaClinica": "Meta porta-balão ==< 90 min== (ou ==< 120 min== se transferência); meta porta-agulha ==< 30 min==."
+  },
+  {
+    "tipoCard": "fluxograma_oclusao",
+    "topico": "Manejo de Via Aérea na Emergência",
+    "titulo": "Sequência Rápida de Intubação (7 Ps)",
+    "especialidade": "Medicina de Emergência",
+    "perguntaGatilho": "Qual a ordem correta dos 7 Ps na Sequência Rápida de Intubação (SRI) e o que fazer em cada passo?",
+    "passos": [
+      {
+        "titulo": "Preparação",
+        "conduta": "Checar laringoscópio, ==tubo orotraqueal 7.5 a 8.5==, fio-guia, aspirador a vácuo, monitorização e [azul]acesso venoso calibroso[/azul]."
+      },
+      {
+        "titulo": "Pré-oxigenação",
+        "conduta": "Ofertar O2 a 100% sob máscara não reinalante por ==3 a 5 minutos== sem ventilar com pressão positiva."
+      },
+      {
+        "titulo": "Pré-tratamento / Otimização",
+        "conduta": "Estabilizar hemodinâmica com cristaloide ou [azul]Noradrenalina[/azul] se hipotensão; considerar [azul]Fentanil 1-3 mcg/kg[/azul] se HIC ou dissecção."
+      },
+      {
+        "titulo": "Paralisia com Indução",
+        "conduta": "Hipnótico [azul]Etomidato 0.3 mg/kg[/azul] ou [azul]Cetamina 1.5-2 mg/kg[/azul] seguido de bloqueador [azul]Succinilcolina 1.5 mg/kg[/azul] ou [azul]Rocurônio 1.2 mg/kg[/azul]."
+      },
+      {
+        "titulo": "Posicionamento e Passagem do Tubo",
+        "conduta": "Posição olfativa (sniffing), aguardar ==45 a 60 segundos== de relaxamento e inserir o tubo sob visualização direta das pregas vocais."
+      },
+      {
+        "titulo": "Pós-intubação",
+        "conduta": "Insuflar balonete, confirmar posição com [verde]capnografia em onda[/verde] e ausculta (epigástrio e bases/ápices), fixar tubo e iniciar sedação contínua."
+      }
+    ],
+    "perolaClinica": "Na SRI, não se ventila com bolsa-válvula-máscara antes da intubação, salvo se SatO2 cair para [vermelho]< 90%[/vermelho]."
   },
   {
     "tipoCard": "fluxograma_complexo",
     "topico": "Síndrome Coronariana Aguda",
-    "titulo": "Algoritmo de Decisão de Reperfusão no IAM com Supra de ST",
+    "titulo": "Fluxograma de Reperfusão no IAM com Supra de ST",
     "especialidade": "Cardiologia",
-    "perguntaGatilho": "Dor torácica com Supra de ST no ECG: qual a conduta imediata e o tempo-limite para angioplastia primária vs trombólise química?",
+    "perguntaGatilho": "Fluxograma de decisão de reperfusão no IAM com Supra de ST (Angioplastia vs Fibrinólise):",
     "fluxogramaComplexo": {
       "id": "fluxo-iamcsst",
-      "titulo": "Algoritmo de Reperfusão no IAMCSST",
-      "descricao": "Estratificação do tempo porta-balão vs porta-agulha e critérios de transferência",
+      "titulo": "Fluxograma de Reperfusão no IAMCSST",
       "noInicialId": "no-1",
       "nos": [
         {
           "id": "no-1",
-          "titulo": "IAM com Supra de ST Confirmado no ECG (< 10 min)",
-          "descricao": "Iniciar dupla antiagregação imediata (AAS + Clopidogrel/Ticagrelor) e avaliar disponibilidade de laboratório de hemodinâmica.",
-          "tipo": "inicio",
-          "posicaoX": 500,
-          "posicaoY": 50,
+          "titulo": "IAMCSST confirmado no ECG em ≤ 10 min",
+          "descricao": "Iniciar [azul]AAS 200 mg + Ticagrelor 180 mg[/azul] (ou Clopidogrel 300 mg) e avaliar tempo até hemodinâmica.",
           "ramos": [
-            { "id": "r1", "rotulo": "Tempo previsto até angioplastia < 120 min", "destinoNoId": "no-cate", "cor": "verde" },
-            { "id": "r2", "rotulo": "Tempo previsto até angioplastia > 120 min", "destinoNoId": "no-trombolise", "cor": "amber" }
+            { "id": "r1", "rotulo": "Hemodinâmica ≤ 120 min", "destinoNoId": "no-cate", "cor": "verde" },
+            { "id": "r2", "rotulo": "Hemodinâmica > 120 min", "destinoNoId": "no-trombolise", "cor": "amber" }
           ]
         },
         {
           "id": "no-cate",
-          "titulo": "Angioplastia Primária Imediata (Padrão-Ouro)",
-          "descricao": "Transferência imediata para hemodinâmica. Meta porta-balão ==< 90 minutos== (ou ==< 120 min== se transferido).",
-          "tipo": "conduta",
-          "oculto": true,
-          "dica": "Estratégia mecânica de reperfusão",
-          "posicaoX": 250,
-          "posicaoY": 240,
+          "titulo": "Angioplastia Primária Imediata",
+          "descricao": "Padrão-ouro. Meta porta-balão ==≤ 90 min== (ou ==≤ 120 min== se hospital sem hemodinâmica).",
           "ramos": []
         },
         {
           "id": "no-trombolise",
-          "titulo": "Fibrinólise Química na Sala de Emergência",
-          "descricao": "Tenecteplase (TNK) ou Alteplase (rtPA) em até ==30 minutos== (porta-agulha). Se falha de reperfusão em 90 min: CATE de resgate.",
-          "tipo": "alerta",
-          "oculto": true,
-          "dica": "Estratégia química quando não há hemodinâmica rápida",
-          "posicaoX": 750,
-          "posicaoY": 240,
+          "titulo": "Fibrinólise Química na Emergência",
+          "descricao": "Checar contraindicações e administrar [azul]Tenecteplase (TNK)[/azul] com meta porta-agulha ==≤ 30 min==.",
+          "ramos": [
+            { "id": "r3", "rotulo": "Queda do supra ≥ 50% em 90 min", "destinoNoId": "no-sucesso", "cor": "verde" },
+            { "id": "r4", "rotulo": "Sem reperfusão em 90 min", "destinoNoId": "no-resgate", "cor": "vermelho" }
+          ]
+        },
+        {
+          "id": "no-sucesso",
+          "titulo": "Estratégia Fármaco-Invasiva",
+          "descricao": "Transferir para coronariografia eletiva precoce entre ==2 e 24 horas==.",
+          "ramos": []
+        },
+        {
+          "id": "no-resgate",
+          "titulo": "Angioplastia de Resgate Imediata",
+          "descricao": "[vermelho]Falha de trombólise:[/vermelho] encaminhar imediatamente para hemodinâmica de urgência.",
           "ramos": []
         }
       ]
-    }
+    },
+    "perolaClinica": "Após fibrinólise com sucesso, o paciente ainda deve realizar CATE entre 2 e 24 horas (estratégia fármaco-invasiva)."
   }
 ]
 
@@ -444,9 +474,16 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [focoInstitucional, setFocoInstitucional] = useState<FocoInstitucional>('ufpa');
   const [quantidadePrompt, setQuantidadePrompt] = useState<number>(20);
+  const [modoQuantidadePrompt, setModoQuantidadePrompt] = useState<ModoQuantidadePrompt>('fixo_20');
+
+  const ajustarQuantidadePersonalizada = (delta: number) => {
+    setModoQuantidadePrompt('personalizado');
+    setQuantidadePrompt(prev => Math.max(5, Math.min(150, prev + delta)));
+  };
 
   const handleCopiarPrompt = async () => {
-    const promptTexto = gerarPromptCompleto(focoInstitucional, quantidadePrompt);
+    const qtdEfetiva = modoQuantidadePrompt === 'fixo_20' ? 20 : quantidadePrompt;
+    const promptTexto = gerarPromptCompleto(focoInstitucional, qtdEfetiva, modoQuantidadePrompt);
     const ok = await AnkiService.copiarParaClipboard(promptTexto);
     if (ok) {
       setPromptCopiado(true);
@@ -1359,28 +1396,28 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
         <div className="p-3.5 sm:p-6 overflow-y-auto space-y-3 sm:space-y-4 flex-1">
           {tabAtiva === 'importar' ? (
             <div className="space-y-3 sm:space-y-3.5">
-              {/* Alternador de Modo: Colar do Gemini vs Arquivo */}
-              <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-2xl">
+              {/* Alternador de Modo: Prompt Gemini & IA vs Arquivo */}
+              <div className="flex items-center gap-1 p-1 bg-zinc-100 rounded-2xl border border-zinc-200/70">
                 <button
                   type="button"
                   onClick={() => setModoImportacao('texto')}
-                  className={`flex-1 py-1.5 sm:py-2 px-2 sm:px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer ${
+                  className={`flex-1 py-2 px-2.5 sm:px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer touch-instant ${
                     modoImportacao === 'texto'
-                      ? 'bg-white text-blue-700 shadow-2xs font-black'
-                      : 'text-slate-500 hover:text-slate-800'
+                      ? 'bg-white text-zinc-900 shadow-2xs ring-1 ring-black/5'
+                      : 'text-zinc-500 hover:text-zinc-800'
                   }`}
                 >
                   <Sparkles className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                  <span className="sm:hidden">Colar IA</span>
-                  <span className="hidden sm:inline">Colar do Gemini / IA</span>
+                  <span className="sm:hidden">Prompt Gemini & IA</span>
+                  <span className="hidden sm:inline">Prompt ao Gemini & Colar IA</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setModoImportacao('arquivo')}
-                  className={`flex-1 py-1.5 sm:py-2 px-2 sm:px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer ${
+                  className={`flex-1 py-2 px-2.5 sm:px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer touch-instant ${
                     modoImportacao === 'arquivo'
-                      ? 'bg-white text-slate-900 shadow-2xs font-black'
-                      : 'text-slate-500 hover:text-slate-800'
+                      ? 'bg-white text-zinc-900 shadow-2xs ring-1 ring-black/5'
+                      : 'text-zinc-500 hover:text-zinc-800'
                   }`}
                 >
                   <Package className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
@@ -1426,23 +1463,22 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
                 </div>
               ) : (
                 <div className="space-y-3 sm:space-y-3.5">
-                  {/* Card Executivo do Prompt Mestre com Seletor de Foco Institucional */}
-                  <div className="p-3 sm:p-5 bg-gradient-to-b from-slate-50 to-slate-100/70 border border-slate-200/90 rounded-2xl sm:rounded-3xl space-y-3 sm:space-y-4 shadow-xs">
+                  {/* Card Minimalista do Prompt ao Gemini com Foco Institucional e 3 Opções de Quantidade */}
+                  <div className="p-3.5 sm:p-5 bg-[#F7F7F5] border border-zinc-200/90 rounded-2xl sm:rounded-3xl space-y-3.5">
                     
-                    {/* Linha de Seleção do Foco: UFPA | ENAMED | USP */}
-                    <div className="space-y-1 sm:space-y-1.5">
+                    {/* 1. Linha de Seleção do Foco: UFPA | ENAMED | USP */}
+                    <div className="space-y-1.5">
                       <div className="flex items-center justify-between text-xs">
-                        <span className="font-extrabold text-slate-800 tracking-tight flex items-center gap-1.5 text-xs sm:text-[13px]">
+                        <span className="font-bold text-zinc-800 tracking-tight flex items-center gap-1.5 text-xs sm:text-[13px]">
                           <span>🎯</span>
-                          <span className="sm:hidden">Perfil do Prompt:</span>
-                          <span className="hidden sm:inline">Foco do Prompt Mestre:</span>
+                          <span>1. Perfil da Banca no Prompt ao Gemini:</span>
                         </span>
-                        <span className="text-[10px] sm:text-[11px] font-semibold text-slate-500 shrink-0">
-                          Selecione o perfil
+                        <span className="text-[10.5px] font-medium text-zinc-500 shrink-0">
+                          {FOCOS_INSTITUCIONAIS[focoInstitucional].sigla}
                         </span>
                       </div>
 
-                      <div className="grid grid-cols-3 gap-1 p-1 bg-slate-200/80 rounded-xl sm:rounded-2xl">
+                      <div className="grid grid-cols-3 gap-1 p-1 bg-zinc-200/75 rounded-xl">
                         {(['ufpa', 'enamed', 'usp'] as FocoInstitucional[]).map(focoId => {
                           const info = FOCOS_INSTITUCIONAIS[focoId];
                           const ativo = focoInstitucional === focoId;
@@ -1451,10 +1487,10 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
                               key={focoId}
                               type="button"
                               onClick={() => setFocoInstitucional(focoId)}
-                              className={`py-1.5 sm:py-2 px-1 sm:px-2.5 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-black transition-all flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer ${
+                              className={`py-1.5 sm:py-2 px-1.5 sm:px-2.5 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer touch-instant ${
                                 ativo
-                                  ? `${info.corBadge} shadow-sm ring-1 ring-black/5`
-                                  : 'text-slate-600 hover:text-slate-950 hover:bg-white/60'
+                                  ? `${info.corBadge} shadow-xs ring-1 ring-black/5`
+                                  : 'text-zinc-600 hover:text-zinc-950 hover:bg-white/60'
                               }`}
                             >
                               <span className="text-[11px] sm:text-xs shrink-0">{info.iconeEmoji}</span>
@@ -1465,114 +1501,230 @@ export const ImportExportModal: React.FC<ImportExportModalProps> = ({
                       </div>
                     </div>
 
-                    {/* Bloco de Apresentação e Botão de Copiar */}
-                    <div className="p-2.5 sm:p-3.5 bg-white rounded-xl sm:rounded-2xl border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 shadow-2xs">
-                      <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-                        <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl ${FOCOS_INSTITUCIONAIS[focoInstitucional].corBadge} flex flex-col items-center justify-center font-black tracking-tight shrink-0 shadow-sm ring-1 ring-black/5`}>
-                          <span className="text-[8px] sm:text-[9px] opacity-80 uppercase leading-none font-bold">Foco</span>
-                          <span className="text-[11px] sm:text-xs font-black leading-tight">{FOCOS_INSTITUCIONAIS[focoInstitucional].sigla}</span>
-                        </div>
-                        <div className="min-w-0">
-                          <h4 className="text-xs sm:text-sm font-black text-slate-900 leading-snug truncate">
-                            {FOCOS_INSTITUCIONAIS[focoInstitucional].nomeCompleto}
-                          </h4>
-                          <p className="text-[10.5px] sm:text-[11px] text-slate-600 font-medium leading-snug sm:leading-relaxed mt-0.5 line-clamp-2 sm:line-clamp-none">
-                            {FOCOS_INSTITUCIONAIS[focoInstitucional].descricao}
-                          </p>
-                        </div>
+                    {/* 2. Seletor Rápido de Quantidade de Flashcards (20 Tudo | Personalizado +/-5 | Ideal pelo Gemini) */}
+                    <div className="space-y-2 pt-1 border-t border-zinc-200/70">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-zinc-800 tracking-tight flex items-center gap-1.5 text-xs sm:text-[13px]">
+                          <span>⚡</span>
+                          <span>2. Quantidade de Flashcards (Abordando 100% de Tudo):</span>
+                        </span>
                       </div>
 
-                      <div className="flex items-center gap-2 w-full sm:w-auto pt-1 sm:pt-0 border-t sm:border-t-0 border-slate-100 justify-end">
-                        {/* Caixa pequena para digitar a quantidade desejada de flashcards (padrão 20) */}
-                        <div 
-                          className="flex items-center gap-1 bg-slate-50 border border-slate-200/90 rounded-xl px-2 py-1.5 shadow-3xs shrink-0"
-                          title="Quantidade de flashcards a ser gerada pelo prompt (padrão: 20)"
-                        >
-                          <label htmlFor="input-qtd-prompt" className="text-[10.5px] font-bold text-slate-700 whitespace-nowrap cursor-pointer">
-                            Qtd:
-                          </label>
-                          <input
-                            id="input-qtd-prompt"
-                            type="number"
-                            min={1}
-                            max={100}
-                            value={quantidadePrompt}
-                            onChange={e => {
-                              const val = parseInt(e.target.value, 10);
-                              if (isNaN(val)) {
-                                setQuantidadePrompt(20);
-                              } else {
-                                setQuantidadePrompt(Math.max(1, Math.min(100, val)));
-                              }
-                            }}
-                            className="w-10 text-center text-xs font-black text-slate-900 bg-white border border-slate-300 rounded-lg py-0.5 px-0.5 focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 outline-none"
-                          />
-                          <span className="text-[10px] text-slate-500 font-semibold hidden sm:inline">cards</span>
-                        </div>
-
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        {/* OPÇÃO A: 20 Flashcards (que abordem TUDO) */}
                         <button
                           type="button"
-                          onClick={handleCopiarPrompt}
-                          className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 text-xs font-bold px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white shadow-sm shadow-blue-600/25 cursor-pointer transition-all active:scale-95 shrink-0"
-                          title="Copiar prompt completo formatado para colar na IA"
+                          onClick={() => {
+                            setModoQuantidadePrompt('fixo_20');
+                            setQuantidadePrompt(20);
+                          }}
+                          className={`p-2.5 sm:p-3 rounded-xl border text-left flex flex-col justify-between gap-1 cursor-pointer touch-instant ${
+                            modoQuantidadePrompt === 'fixo_20'
+                              ? 'bg-white border-zinc-900 ring-1 ring-zinc-900 shadow-2xs'
+                              : 'bg-white/75 hover:bg-white border-zinc-200/90 text-zinc-700'
+                          }`}
                         >
-                          {promptCopiado ? (
-                            <>
-                              <ClipboardCheck className="w-4 h-4 text-white shrink-0" />
-                              <span>Prompt Copiado!</span>
-                            </>
-                          ) : (
-                            <>
-                              <Copy className="w-4 h-4 text-white shrink-0" />
-                              <span>Copiar Prompt ({quantidadePrompt})</span>
-                            </>
-                          )}
+                          <div className="flex items-center justify-between gap-1.5">
+                            <span className="text-xs sm:text-[13px] font-bold text-zinc-900">
+                              20 Flashcards
+                            </span>
+                            <span className={`text-[9.5px] font-bold px-1.5 py-0.5 rounded-full uppercase ${
+                              modoQuantidadePrompt === 'fixo_20'
+                                ? 'bg-zinc-900 text-white'
+                                : 'bg-zinc-100 text-zinc-600'
+                            }`}>
+                              Abordar Tudo
+                            </span>
+                          </div>
+                          <p className="text-[10.5px] text-zinc-500 leading-snug">
+                            Sintetiza e cobre 100% da matéria em 20 cards de alto rendimento.
+                          </p>
+                        </button>
+
+                        {/* OPÇÃO B: Número Personalizado (-5 / +5 ou digitar direto) */}
+                        <div
+                          onClick={() => {
+                            if (modoQuantidadePrompt !== 'personalizado') {
+                              setModoQuantidadePrompt('personalizado');
+                            }
+                          }}
+                          className={`p-2.5 sm:p-3 rounded-xl border text-left flex flex-col justify-between gap-1.5 cursor-pointer transition-colors ${
+                            modoQuantidadePrompt === 'personalizado'
+                              ? 'bg-white border-blue-600 ring-1 ring-blue-600 shadow-2xs'
+                              : 'bg-white/75 hover:bg-white border-zinc-200/90 text-zinc-700'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-xs sm:text-[13px] font-bold text-zinc-900">
+                              Nº Personalizado
+                            </span>
+                            <span className={`text-[9.5px] font-bold px-1.5 py-0.5 rounded-full uppercase ${
+                              modoQuantidadePrompt === 'personalizado'
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-zinc-100 text-zinc-600'
+                            }`}>
+                              -5 / +5 ou Digitar
+                            </span>
+                          </div>
+
+                          {/* Controles rápidos: -5 | Input Numérico | +5 */}
+                          <div
+                            className="flex items-center justify-between gap-1.5 pt-0.5"
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => ajustarQuantidadePersonalizada(-5)}
+                              title="Diminuir 5 flashcards"
+                              className="px-2.5 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-800 font-bold text-xs flex items-center gap-0.5 cursor-pointer touch-instant border border-zinc-200/80"
+                            >
+                              <Minus className="w-3 h-3" />
+                              <span>5</span>
+                            </button>
+
+                            <div className="flex items-center gap-1 flex-1 justify-center">
+                              <input
+                                id="input-qtd-prompt"
+                                type="number"
+                                min={1}
+                                max={150}
+                                value={quantidadePrompt}
+                                onFocus={() => setModoQuantidadePrompt('personalizado')}
+                                onChange={e => {
+                                  setModoQuantidadePrompt('personalizado');
+                                  const val = parseInt(e.target.value, 10);
+                                  if (isNaN(val)) {
+                                    setQuantidadePrompt(20);
+                                  } else {
+                                    setQuantidadePrompt(Math.max(1, Math.min(150, val)));
+                                  }
+                                }}
+                                className="w-14 text-center text-xs sm:text-[13px] font-bold text-zinc-900 bg-zinc-50 border border-zinc-300 rounded-lg py-1 px-1 focus:bg-white focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 outline-none"
+                              />
+                              <span className="text-[10.5px] text-zinc-500 font-medium">cards</span>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => ajustarQuantidadePersonalizada(5)}
+                              title="Aumentar 5 flashcards"
+                              className="px-2.5 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-800 font-bold text-xs flex items-center gap-0.5 cursor-pointer touch-instant border border-zinc-200/80"
+                            >
+                              <Plus className="w-3 h-3" />
+                              <span>5</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* OPÇÃO C: Número "Ideal" julgado pelo Gemini para abordar TUDO */}
+                        <button
+                          type="button"
+                          onClick={() => setModoQuantidadePrompt('ideal')}
+                          className={`p-2.5 sm:p-3 rounded-xl border text-left flex flex-col justify-between gap-1 cursor-pointer touch-instant ${
+                            modoQuantidadePrompt === 'ideal'
+                              ? 'bg-white border-emerald-600 ring-1 ring-emerald-600 shadow-2xs'
+                              : 'bg-white/75 hover:bg-white border-zinc-200/90 text-zinc-700'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-1.5">
+                            <span className="text-xs sm:text-[13px] font-bold text-zinc-900 flex items-center gap-1">
+                              <Sparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                              <span>Nº Ideal (Gemini)</span>
+                            </span>
+                            <span className={`text-[9.5px] font-bold px-1.5 py-0.5 rounded-full uppercase ${
+                              modoQuantidadePrompt === 'ideal'
+                                ? 'bg-emerald-600 text-white'
+                                : 'bg-emerald-50 text-emerald-800'
+                            }`}>
+                              100% Exaustivo
+                            </span>
+                          </div>
+                          <p className="text-[10.5px] text-zinc-500 leading-snug">
+                            O Gemini avalia a aula e cria a quantidade ideal para abordar tudo.
+                          </p>
                         </button>
                       </div>
                     </div>
 
-                    {/* Guia em 3 Passos: Horizontal e Compacto no Mobile */}
-                    <div className="grid grid-cols-3 gap-1.5 text-xs">
-                      <div className="p-1.5 sm:p-2.5 rounded-xl bg-white/90 border border-slate-200/80 text-slate-700 flex items-center gap-1.5 sm:gap-2.5 shadow-2xs min-w-0">
-                        <span className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-blue-100 text-blue-700 font-extrabold text-[10px] sm:text-[11px] flex items-center justify-center shrink-0">1</span>
+                    {/* 3. Barra de Ação Principal: Resumo do Perfil + Botão de Copiar Prompt */}
+                    <div className="p-3 bg-white rounded-2xl border border-zinc-200/85 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-2xs">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className={`w-10 h-10 rounded-xl ${FOCOS_INSTITUCIONAIS[focoInstitucional].corBadge} flex flex-col items-center justify-center font-black tracking-tight shrink-0`}>
+                          <span className="text-[8px] opacity-80 uppercase leading-none font-bold">Foco</span>
+                          <span className="text-[11px] font-black leading-tight">{FOCOS_INSTITUCIONAIS[focoInstitucional].sigla}</span>
+                        </div>
                         <div className="min-w-0">
-                          <p className="font-bold text-slate-900 text-[10.5px] sm:text-[11.5px] leading-tight truncate">Copiar</p>
-                          <p className="text-[9px] sm:text-[10px] text-slate-500 truncate hidden xs:block sm:block">No botão azul</p>
+                          <h4 className="text-xs sm:text-[13px] font-bold text-zinc-900 leading-snug truncate">
+                            {FOCOS_INSTITUCIONAIS[focoInstitucional].nomeCompleto}
+                          </h4>
+                          <p className="text-[10.5px] text-zinc-500 font-medium leading-snug mt-0.5 truncate">
+                            {modoQuantidadePrompt === 'ideal'
+                              ? 'Modo Ideal: o Gemini define quantos cards criar para cobrir 100% de tudo'
+                              : modoQuantidadePrompt === 'fixo_20'
+                                ? 'Modo 20 Cards: aborda 100% de todo o conteúdo em 20 flashcards'
+                                : `Modo Personalizado: gera exatos ${quantidadePrompt} flashcards abordando 100% de tudo`}
+                          </p>
                         </div>
                       </div>
-                      <div className="p-1.5 sm:p-2.5 rounded-xl bg-white/90 border border-slate-200/80 text-slate-700 flex items-center gap-1.5 sm:gap-2.5 shadow-2xs min-w-0">
-                        <span className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-blue-100 text-blue-700 font-extrabold text-[10px] sm:text-[11px] flex items-center justify-center shrink-0">2</span>
-                        <div className="min-w-0">
-                          <p className="font-bold text-slate-900 text-[10.5px] sm:text-[11.5px] leading-tight truncate">Gerar na IA</p>
-                          <p className="text-[9px] sm:text-[10px] text-slate-500 truncate hidden xs:block sm:block">Envie sua aula</p>
-                        </div>
-                      </div>
-                      <div className="p-1.5 sm:p-2.5 rounded-xl bg-white/90 border border-slate-200/80 text-slate-700 flex items-center gap-1.5 sm:gap-2.5 shadow-2xs min-w-0">
-                        <span className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-blue-100 text-blue-700 font-extrabold text-[10px] sm:text-[11px] flex items-center justify-center shrink-0">3</span>
-                        <div className="min-w-0">
-                          <p className="font-bold text-slate-900 text-[10.5px] sm:text-[11.5px] leading-tight truncate">Colar JSON</p>
-                          <p className="text-[9px] sm:text-[10px] text-slate-500 truncate hidden xs:block sm:block">No campo abaixo</p>
-                        </div>
-                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleCopiarPrompt}
+                        className="w-full sm:w-auto inline-flex items-center justify-center gap-2 text-xs sm:text-[13px] font-semibold px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white cursor-pointer touch-instant shrink-0 shadow-xs"
+                        title="Copiar prompt completo formatado para colar no Gemini"
+                      >
+                        {promptCopiado ? (
+                          <>
+                            <ClipboardCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                            <span>Prompt Copiado!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-4 h-4 text-white shrink-0" />
+                            <span>
+                              {modoQuantidadePrompt === 'ideal'
+                                ? 'Copiar Prompt (Nº Ideal • Tudo)'
+                                : modoQuantidadePrompt === 'fixo_20'
+                                  ? 'Copiar Prompt (20 Cards • Tudo)'
+                                  : `Copiar Prompt (${quantidadePrompt} Cards • Tudo)`}
+                            </span>
+                          </>
+                        )}
+                      </button>
                     </div>
 
                     {/* Acordeão de Prévia do Prompt */}
-                    <div className="pt-0.5">
+                    <div className="pt-0.5 flex items-center justify-between">
                       <button
                         type="button"
                         onClick={() => setVerPromptDetalhado(!verPromptDetalhado)}
-                        className="text-[11px] sm:text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1.5 transition-colors cursor-pointer"
+                        className="text-[11px] font-semibold text-zinc-600 hover:text-zinc-900 flex items-center gap-1.5 cursor-pointer touch-instant"
                       >
-                        <span className="truncate">{verPromptDetalhado ? 'Ocultar diretrizes do prompt' : `Ver texto completo do prompt (${FOCOS_INSTITUCIONAIS[focoInstitucional].sigla} • ${quantidadePrompt} cards)`}</span>
+                        <span className="truncate">
+                          {verPromptDetalhado
+                            ? 'Ocultar texto do prompt'
+                            : `Inspecionar prompt (${FOCOS_INSTITUCIONAIS[focoInstitucional].sigla} • ${
+                                modoQuantidadePrompt === 'ideal'
+                                  ? 'Quantidade Ideal pelo Gemini'
+                                  : `${modoQuantidadePrompt === 'fixo_20' ? 20 : quantidadePrompt} cards`
+                              })`}
+                        </span>
                         {verPromptDetalhado ? <ChevronUp className="w-3.5 h-3.5 shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 shrink-0" />}
                       </button>
-
-                      {verPromptDetalhado && (
-                        <div className="mt-2.5 p-3 sm:p-3.5 bg-slate-950 text-slate-200 rounded-xl sm:rounded-2xl border border-slate-800 text-[10.5px] sm:text-[11px] font-mono max-h-56 overflow-y-auto whitespace-pre-wrap leading-relaxed shadow-inner selection:bg-blue-600 selection:text-white">
-                          {gerarPromptCompleto(focoInstitucional, quantidadePrompt)}
-                        </div>
-                      )}
+                      <span className="text-[10.5px] text-zinc-400 hidden sm:inline">
+                        1. Copie o prompt ➔ 2. Envie ao Gemini com a aula ➔ 3. Cole o JSON abaixo
+                      </span>
                     </div>
+
+                    {verPromptDetalhado && (
+                      <div className="p-3 sm:p-3.5 bg-zinc-950 text-zinc-200 rounded-xl border border-zinc-800 text-[10.5px] sm:text-[11px] font-mono max-h-56 overflow-y-auto whitespace-pre-wrap leading-relaxed">
+                        {gerarPromptCompleto(
+                          focoInstitucional,
+                          modoQuantidadePrompt === 'fixo_20' ? 20 : quantidadePrompt,
+                          modoQuantidadePrompt
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Seletor de Destino dos Flashcards Repaginado posicionado logo abaixo do Prompt Mestre */}

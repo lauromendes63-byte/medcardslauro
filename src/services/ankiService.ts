@@ -74,20 +74,30 @@ export const AnkiService = {
       };
     }
 
-    // Normalização de Fluxograma / Algoritmo de Decisão
+    // Normalização de Passo a Passo (fluxograma_oclusao)
     let algoritmoDecisao: AlgoritmoDecisao | undefined = c.algoritmoDecisao;
     let blocosOclusao: BlocoOclusao[] | undefined = c.blocosOclusao;
 
     if (isFluxograma && !algoritmoDecisao) {
-      const etapas = c.etapas || c.passos || c.blocos || [];
+      const etapas = c.passos || c.etapas || c.blocos || [];
       if (Array.isArray(etapas) && etapas.length > 0) {
-        const blocos = etapas.map((et: any, idx: number) => ({
-          id: et.id || `b-${Date.now()}-${idx + 1}`,
-          titulo: et.titulo || `Etapa ${idx + 1}`,
-          descricao: et.conduta || et.condutaOuAcao || et.descricao || et.acao || '',
-          tipo: (idx === 0 ? 'inicio' : (idx === etapas.length - 1 ? 'conduta' : 'decisao')) as any,
-          criterioEntrada: et.criterio || et.criterioEntrada || et.criterioSeta || (idx > 0 ? `Critério ${idx}` : 'Início'),
-        }));
+        const blocos = etapas.map((et: any, idx: number) => {
+          if (typeof et === 'string') {
+            return {
+              id: `b-${Date.now()}-${idx + 1}`,
+              titulo: '',
+              descricao: et.trim(),
+              tipo: 'conduta' as const,
+            };
+          }
+          return {
+            id: et.id || `b-${Date.now()}-${idx + 1}`,
+            titulo: et.titulo || '',
+            descricao: et.conduta || et.condutaOuAcao || et.descricao || et.texto || et.acao || et.conteudo || '',
+            tipo: 'conduta' as const,
+            criterioEntrada: et.criterio || et.criterioEntrada || et.criterioSeta || undefined,
+          };
+        });
 
         const ramificacoes = [];
         for (let i = 0; i < blocos.length - 1; i++) {
@@ -95,41 +105,78 @@ export const AnkiService = {
             id: `ram-${Date.now()}-${i}`,
             origemId: blocos[i].id,
             destinoId: blocos[i + 1].id,
-            criterioCondicional: blocos[i + 1].criterioEntrada || 'Próxima conduta',
+            criterioCondicional: blocos[i + 1].criterioEntrada || undefined,
           });
         }
 
         algoritmoDecisao = {
           id: `alg-${Date.now()}-${index + 1}`,
-          titulo: c.titulo || 'Algoritmo de Decisão Clínica',
+          titulo: c.titulo || 'Passo a Passo Clínico',
           especialidade: c.especialidade || especialidadePadrao || 'Geral / Outros',
           eixoId: c.eixoId || eixoPadraoId,
           topicoId: topicoPadraoId || c.topicoId,
           blocos,
           ramificacoes,
         };
+
+        if (!verso) {
+          verso = blocos
+            .map((b, i) => `${i + 1}. ${b.titulo ? `${b.titulo}: ` : ''}${b.descricao}`)
+            .join('\n');
+        }
       }
     }
 
-    if (algoritmoDecisao && (!blocosOclusao || blocosOclusao.length === 0)) {
-      blocosOclusao = algoritmoDecisao.blocos.map((b, idx) => ({
-        id: b.id,
-        posicao: { x: 10, y: 15 + idx * 25, largura: 80, altura: 20 },
-        textoOculto: (b.descricao || b.titulo || '').replace(/^\[.*?\]:\s*/, ''),
-        dica: b.titulo,
-        revelado: false,
-      }));
+    if (algoritmoDecisao && Array.isArray(algoritmoDecisao.blocos)) {
+      // Garante que o Passo 1 nunca venha pré-revelado por causa de tipo === 'inicio'
+      algoritmoDecisao = {
+        ...algoritmoDecisao,
+        blocos: algoritmoDecisao.blocos.map((b) => ({
+          ...b,
+          tipo: 'conduta',
+        })),
+      };
+
+      if (!blocosOclusao || blocosOclusao.length === 0) {
+        blocosOclusao = algoritmoDecisao.blocos.map((b, idx) => ({
+          id: b.id || `bo-${idx + 1}`,
+          posicao: { x: 10, y: 15 + idx * 25, largura: 80, altura: 20 },
+          textoOculto: (b.descricao || b.titulo || '').replace(/^\[.*?\]:\s*/, ''),
+          dica: b.titulo || undefined,
+          revelado: false,
+        }));
+      }
     }
 
-    // Normalização de Fluxograma Complexo (Árvore de Decisão Ramificada)
+    // Normalização de Fluxograma (Diagnóstico / Rastreio / Tratamento / Revisão Completa)
     let fluxogramaComplexo = c.fluxogramaComplexo || c.arvoreDecisao || c.fluxoComplexo;
     if (isFluxogramaComplexo && !fluxogramaComplexo && Array.isArray(c.nos)) {
       fluxogramaComplexo = {
         id: c.id || `fluxo-${Date.now()}-${index + 1}`,
-        titulo: c.titulo || 'Árvore de Decisão Clínica',
+        titulo: c.titulo || 'Fluxograma Clínico',
         descricao: c.descricao || c.perolaClinica || '',
         noInicialId: c.noInicialId || c.nos[0]?.id || 'no-1',
         nos: c.nos,
+      };
+    }
+    if (fluxogramaComplexo && Array.isArray(fluxogramaComplexo.nos)) {
+      fluxogramaComplexo = {
+        ...fluxogramaComplexo,
+        noInicialId: fluxogramaComplexo.noInicialId || fluxogramaComplexo.nos[0]?.id || 'no-1',
+        nos: fluxogramaComplexo.nos.map((n: any, idx: number) => ({
+          id: n.id || `no-${idx + 1}`,
+          titulo: n.titulo || n.conduta || `Etapa ${idx + 1}`,
+          descricao: n.descricao || n.detalhes || '',
+          tipo: n.tipo || (idx === 0 ? 'inicio' : 'conduta'),
+          ramos: Array.isArray(n.ramos)
+            ? n.ramos.map((r: any, rIdx: number) => ({
+                id: r.id || `r-${idx + 1}-${rIdx + 1}`,
+                rotulo: r.rotulo || r.condicao || r.criterio || '',
+                destinoNoId: r.destinoNoId || r.destinoId || r.para || '',
+                cor: r.cor || 'azul',
+              }))
+            : [],
+        })),
       };
     }
 

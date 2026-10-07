@@ -1,95 +1,81 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { 
-  GitFork, 
-  RotateCcw, 
-  Eye, 
-  EyeOff, 
-  CheckCircle2, 
-  HelpCircle, 
-  Maximize2, 
-  Minimize2, 
-  Target, 
-  Sparkles, 
-  Info, 
-  ChevronUp, 
-  ChevronDown, 
+import React, { useState, useMemo, useEffect } from 'react';
+import {
+  GitFork,
+  RotateCcw,
+  Eye,
+  EyeOff,
+  CheckCircle2,
+  Sparkles,
   ChevronLeft,
   ChevronRight,
-  Sun, 
-  Moon, 
-  Compass,
   X,
-  Clock,
   Lightbulb,
-  LayoutGrid,
-  Pencil,
   FilePenLine,
-  ListTree,
-  Stethoscope,
+  ArrowDown,
+  AlertCircle,
+  Zap,
+  BookOpen,
   Layers,
-  MoreVertical
 } from 'lucide-react';
-import { FluxogramaComplexoDados, NoFluxogramaComplexo, RamoFluxogramaComplexo, CardClinico, TopicoClinico } from '../types';
+import {
+  FluxogramaComplexoDados,
+  NoFluxogramaComplexo,
+  RamoFluxogramaComplexo,
+  CardClinico,
+  TopicoClinico,
+} from '../types';
 import { StorageService } from '../services/storage';
 import { formatarTempoMinutos, obterInfoRodadaCard } from '../utils/timerUtils';
 import { EixoEmojiBadge } from './EixoEmojiBadge';
 import { FormattedClinicalText } from './FormattedClinicalText';
-import { 
-  CORES_RAMO, 
-  calcularConexaoDinamica, 
-  calcularLayoutHierarquicoFluxograma,
-  obterDashArraySeta,
-  obterStrokeWidthSeta,
-  FLOWCHART_THEMES, 
-  FlowchartThemeId, 
-  getStoredFlowchartTheme, 
-  setStoredFlowchartTheme 
-} from '../utils/flowchartCurves';
+import {
+  limparPerguntaNorteadora,
+  obterFluxogramaNormalizado,
+} from '../utils/flowchartNormalizer';
 
-// Paleta cromática médica rica para distinguir os caminhos e ramificações na Trilha
 export const CORES_PALETA_RAMOS = [
   {
     corKey: 'emerald',
-    badge: 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30',
-    headerBg: 'bg-gradient-to-r from-emerald-500/15 via-emerald-500/5 to-transparent',
-    headerBorder: 'border-emerald-400/50 dark:border-emerald-600/50',
+    badge: 'bg-emerald-50 text-emerald-900 border border-emerald-300',
+    headerBg: 'bg-emerald-50/60',
+    headerBorder: 'border-emerald-300',
     dot: 'bg-emerald-500',
-    pillAtivo: 'bg-emerald-600 text-white ring-2 ring-emerald-400/60 shadow-xs border-emerald-600',
-    pillInativo: 'border-emerald-400/40 hover:bg-emerald-50/60 dark:hover:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200',
-    cardBorder: 'border-emerald-400/60 dark:border-emerald-700',
+    pillAtivo: 'bg-emerald-600 text-white border-emerald-600',
+    pillInativo: 'border-emerald-300 hover:bg-emerald-50 text-emerald-900',
+    cardBorder: 'border-emerald-300',
     lineColor: '#10b981',
   },
   {
     corKey: 'sky',
-    badge: 'bg-sky-500/15 text-sky-800 dark:text-sky-300 border border-sky-500/30',
-    headerBg: 'bg-gradient-to-r from-sky-500/15 via-sky-500/5 to-transparent',
-    headerBorder: 'border-sky-400/50 dark:border-sky-600/50',
+    badge: 'bg-sky-50 text-sky-900 border border-sky-300',
+    headerBg: 'bg-sky-50/60',
+    headerBorder: 'border-sky-300',
     dot: 'bg-sky-500',
-    pillAtivo: 'bg-sky-600 text-white ring-2 ring-sky-400/60 shadow-xs border-sky-600',
-    pillInativo: 'border-sky-400/40 hover:bg-sky-50/60 dark:hover:bg-sky-950/40 text-sky-900 dark:text-sky-200',
-    cardBorder: 'border-sky-400/60 dark:border-sky-700',
+    pillAtivo: 'bg-sky-600 text-white border-sky-600',
+    pillInativo: 'border-sky-300 hover:bg-sky-50 text-sky-900',
+    cardBorder: 'border-sky-300',
     lineColor: '#0284c7',
   },
   {
     corKey: 'amber',
-    badge: 'bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/30',
-    headerBg: 'bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-transparent',
-    headerBorder: 'border-amber-400/50 dark:border-amber-600/50',
+    badge: 'bg-amber-50 text-amber-900 border border-amber-300',
+    headerBg: 'bg-amber-50/60',
+    headerBorder: 'border-amber-300',
     dot: 'bg-amber-500',
-    pillAtivo: 'bg-amber-600 text-white ring-2 ring-amber-400/60 shadow-xs border-amber-600',
-    pillInativo: 'border-amber-400/40 hover:bg-amber-50/60 dark:hover:bg-amber-950/40 text-amber-900 dark:text-amber-200',
-    cardBorder: 'border-amber-400/60 dark:border-amber-700',
+    pillAtivo: 'bg-amber-600 text-white border-amber-600',
+    pillInativo: 'border-amber-300 hover:bg-amber-50 text-amber-900',
+    cardBorder: 'border-amber-300',
     lineColor: '#d97706',
   },
   {
     corKey: 'purple',
-    badge: 'bg-purple-500/15 text-purple-800 dark:text-purple-300 border border-purple-500/30',
-    headerBg: 'bg-gradient-to-r from-purple-500/15 via-purple-500/5 to-transparent',
-    headerBorder: 'border-purple-400/50 dark:border-purple-600/50',
+    badge: 'bg-purple-50 text-purple-900 border border-purple-300',
+    headerBg: 'bg-purple-50/60',
+    headerBorder: 'border-purple-300',
     dot: 'bg-purple-500',
-    pillAtivo: 'bg-purple-600 text-white ring-2 ring-purple-400/60 shadow-xs border-purple-600',
-    pillInativo: 'border-purple-400/40 hover:bg-purple-50/60 dark:hover:bg-purple-950/40 text-purple-900 dark:text-purple-200',
-    cardBorder: 'border-purple-400/60 dark:border-purple-700',
+    pillAtivo: 'bg-purple-600 text-white border-purple-600',
+    pillInativo: 'border-purple-300 hover:bg-purple-50 text-purple-900',
+    cardBorder: 'border-purple-300',
     lineColor: '#9333ea',
   },
 ];
@@ -98,10 +84,69 @@ export const obterEstiloRamo = (idx: number) => {
   return CORES_PALETA_RAMOS[idx % CORES_PALETA_RAMOS.length];
 };
 
+const ESTILOS_COR_SETA: Record<
+  string,
+  { pill: string; stem: string; arrow: string; dot: string }
+> = {
+  verde: {
+    pill: 'bg-emerald-50 text-emerald-900 border-emerald-300/90',
+    stem: 'bg-emerald-300',
+    arrow: 'text-emerald-600',
+    dot: 'bg-emerald-500',
+  },
+  vermelho: {
+    pill: 'bg-rose-50 text-rose-900 border-rose-300/90',
+    stem: 'bg-rose-300',
+    arrow: 'text-rose-600',
+    dot: 'bg-rose-500',
+  },
+  azul: {
+    pill: 'bg-sky-50 text-sky-900 border-sky-300/90',
+    stem: 'bg-sky-300',
+    arrow: 'text-sky-600',
+    dot: 'bg-sky-500',
+  },
+  amber: {
+    pill: 'bg-amber-50 text-amber-950 border-amber-300/90',
+    stem: 'bg-amber-300',
+    arrow: 'text-amber-600',
+    dot: 'bg-amber-500',
+  },
+  purple: {
+    pill: 'bg-purple-50 text-purple-900 border-purple-300/90',
+    stem: 'bg-purple-300',
+    arrow: 'text-purple-600',
+    dot: 'bg-purple-500',
+  },
+  indigo: {
+    pill: 'bg-indigo-50 text-indigo-900 border-indigo-300/90',
+    stem: 'bg-indigo-300',
+    arrow: 'text-indigo-600',
+    dot: 'bg-indigo-500',
+  },
+  teal: {
+    pill: 'bg-teal-50 text-teal-900 border-teal-300/90',
+    stem: 'bg-teal-300',
+    arrow: 'text-teal-600',
+    dot: 'bg-teal-500',
+  },
+  slate: {
+    pill: 'bg-zinc-100 text-zinc-800 border-zinc-300',
+    stem: 'bg-zinc-300',
+    arrow: 'text-zinc-500',
+    dot: 'bg-zinc-500',
+  },
+};
+
+function obterEstiloSetaRamo(cor?: string, idxFallback: number = 0) {
+  if (cor && ESTILOS_COR_SETA[cor]) return ESTILOS_COR_SETA[cor];
+  const ordem = ['verde', 'vermelho', 'azul', 'amber', 'purple'];
+  return ESTILOS_COR_SETA[ordem[idxFallback % ordem.length]];
+}
+
 interface ComplexFlowchartViewerProps {
   fluxograma: FluxogramaComplexoDados;
   onRegistrarConclusao?: () => void;
-  // Modo de Resolução Imersiva de Flashcard
   initialFullScreen?: boolean;
   onAvaliarRevisao?: (avaliacao: 'errei' | 'dificil' | 'bom' | 'facil') => void;
   onClose?: () => void;
@@ -117,6 +162,7 @@ interface ComplexFlowchartViewerProps {
   onVoltarCard?: () => void;
   onPularCard?: () => void;
   canVoltar?: boolean;
+  comfortMode?: boolean;
 }
 
 export const ComplexFlowchartViewer: React.FC<ComplexFlowchartViewerProps> = ({
@@ -128,2018 +174,717 @@ export const ComplexFlowchartViewer: React.FC<ComplexFlowchartViewerProps> = ({
   tituloContexto,
   perolaClinica,
   perguntaGatilho,
-  tempoDecorridoSegundos,
   progressoTexto,
-  badgeEspecialidade,
   card,
   topico,
   onEditarCard,
   onVoltarCard,
   onPularCard,
   canVoltar = false,
+  comfortMode = false,
 }) => {
-  // FIX #9: configTimers em useMemo ao invés de leitura direta no render (evita JSON.parse por re-render)
-  const configTimers = useMemo(() => StorageService.getConfiguracaoTimers(), []);
-  const infoRodada = useMemo(() => card
-    ? obterInfoRodadaCard(card, topico, configTimers)
-    : {
-        rodada: 1,
-        nomeRodada: 'Rodada 1 (Intensivo)',
-        timers: configTimers.rodada1,
-        ehCustomizadoTopico: false,
-      }
-  , [card, topico, configTimers]);
-  const nosOriginais = Array.isArray(fluxograma?.nos) ? fluxograma.nos : [];
-  const noInicialId = fluxograma?.noInicialId || nosOriginais[0]?.id || '';
+  const dadosNormalizados = useMemo(
+    () => obterFluxogramaNormalizado(fluxograma, tituloContexto || card?.titulo),
+    [fluxograma, tituloContexto, card?.titulo]
+  );
 
-  // O layout estruturado anti-colisão fica SEMPRE ATIVO por padrão (sem necessidade de ativar manualmente)
-  const nos = useMemo(() => {
-    if (!nosOriginais || nosOriginais.length === 0) return [];
+  const nos = dadosNormalizados.nos;
+  const noInicialId = dadosNormalizados.noInicialId || nos[0]?.id || '';
 
-    return calcularLayoutHierarquicoFluxograma(nosOriginais, noInicialId, {
-      cardWidth: 260,
-      cardHeight: 160,
-      rankSep: 110,
-      nodeSep: 100,
-      startX: 520,
-      startY: 50,
-    });
-  }, [nosOriginais, noInicialId]);
-
-  // Estado de tela cheia (ocupa viewport total para máxima imersão)
-  const [isFullScreen, setIsFullScreen] = useState(initialFullScreen);
-
-  // Estados de navegação do Canvas
-  const [zoom, setZoom] = useState(0.65);
-  const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 20, y: 20 });
-  const [arrastandoCanvas, setArrastandoCanvas] = useState(false);
-  const canvasRef = useRef<HTMLDivElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const trilhaScrollRef = useRef<HTMLDivElement>(null);
-
-  // Refs síncronas para handlers de alta frequência (evitam closure desatualizado)
-  const zoomRef = useRef(zoom);
-  const panOffsetRef = useRef(panOffset);
-  const contentLayerRef = useRef<HTMLDivElement>(null);
-
-  // Sincroniza refs imediatamente
-  useEffect(() => {
-    zoomRef.current = zoom;
-  }, [zoom]);
-
-  useEffect(() => {
-    panOffsetRef.current = panOffset;
-  }, [panOffset]);
-
-  // Feedback visual temporário de zoom durante pinça ou scroll
-  const [indicadorZoomVisivel, setIndicadorZoomVisivel] = useState(false);
-  const timeoutIndicadorZoomRef = useRef<NodeJS.Timeout | null>(null);
-
-  const mostrarIndicadorZoom = useCallback(() => {
-    setIndicadorZoomVisivel(true);
-    if (timeoutIndicadorZoomRef.current) {
-      clearTimeout(timeoutIndicadorZoomRef.current);
-    }
-    timeoutIndicadorZoomRef.current = setTimeout(() => {
-      setIndicadorZoomVisivel(false);
-    }, 1200);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (timeoutIndicadorZoomRef.current) {
-        clearTimeout(timeoutIndicadorZoomRef.current);
-      }
-    };
-  }, []);
-
-  // Ref de Pan contínuo com precisão absoluta (evita lags, engasgos e acelerações descontroladas)
-  const panRef = useRef<{
-    ativo: boolean;
-    startX: number;
-    startY: number;
-    initialPanX: number;
-    initialPanY: number;
-    rafId: number | null;
-  }>({
-    ativo: false,
-    startX: 0,
-    startY: 0,
-    initialPanX: 20,
-    initialPanY: 20,
-    rafId: null,
-  });
-
-  // Estados do Treino Ativo / Revelação
-  // O bloco originário (início) começa SEMPRE revelado!
-  const [nosRevelados, setNosRevelados] = useState<Record<string, boolean>>(() => {
-    const inicial: Record<string, boolean> = {};
-    if (noInicialId) {
-      inicial[noInicialId] = true;
-    } else if (nos[0]?.id) {
-      inicial[nos[0].id] = true;
-    }
-    return inicial;
-  });
-
-  const [noSelecionadoDetalheId, setNoSelecionadoDetalheId] = useState<string | null>(noInicialId || nos[0]?.id || null);
-  const [mostrarGavetaDetalhes, setMostrarGavetaDetalhes] = useState(false);
-  const [exibirDicas, setExibirDicas] = useState<boolean>(() => StorageService.getExibirDicas());
-
-  const [bannerPerguntaRecolhido, setBannerPerguntaRecolhido] = useState(false);
-  const [modoExibicao, setModoExibicao] = useState<'canvas' | 'lista'>('canvas');
-  const [filtroRamoId, setFiltroRamoId] = useState<string>('todos');
-  const [densidadeTrilha, setDensidadeTrilha] = useState<'compacto' | 'expandido'>('compacto');
-  const [menuMaisAcoesAberto, setMenuMaisAcoesAberto] = useState(false);
-
-  // Resolução da pergunta gatilho clínica (garante que NUNCA fique vazio ou sem pergunta)
-  const textoPerguntaResolvido = useMemo(() => {
-    if (perguntaGatilho && perguntaGatilho.trim()) return perguntaGatilho.trim();
-    if (card?.perguntaGatilho && card.perguntaGatilho.trim()) return card.perguntaGatilho.trim();
-    if ((card as any)?.pergunta && (card as any).pergunta.trim() && !(card as any).pergunta.startsWith('Navegue pelo algoritmo')) {
-      return (card as any).pergunta.trim();
-    }
-    if (fluxograma?.descricao && fluxograma.descricao.trim()) return fluxograma.descricao.trim();
-    return 'Deduza o algoritmo clínico e determine os desdobramentos e condutas a cada etapa:';
-  }, [perguntaGatilho, card, fluxograma?.descricao]);
-
-  // Sanitiza o texto da pergunta removendo jargões robóticos e comandos prolixos
-  const textoPerguntaFormatado = useMemo(() => {
-    let txt = textoPerguntaResolvido.trim();
-    txt = txt.replace(/^(reconstrua|determine|analise|navegue pel[ao]|complete|identifique|percorra)\s+(a|o)\s+(árvore|algoritmo|fluxograma)(\s+de\s+decisão)?(\s+diagnóstic[ao]\s+e\s+terapêutic[ao])?(\s+propedêutic[ao])?(\s+clínic[ao])?(\s+por\s+imagem)?\s+(frente\s+a\s+(um\s+)?paciente\s+com\s+|para\s+(estratificar\s+|diferenciação\s+e\s+conduta\s+na\s+)?)/i, '');
-    txt = txt.replace(/^(reconstrua|navegue pelo|deduza|determine)\s+o\s+algoritmo\s+(clínico\s+e\s+determine\s+os\s+desdobramentos.*?:?)/i, 'Qual a conduta e desdobramento clínico indicado a cada etapa?');
-    if (txt) {
-      txt = txt.charAt(0).toUpperCase() + txt.slice(1);
-    }
-    return txt || textoPerguntaResolvido;
-  }, [textoPerguntaResolvido]);
-
-  // Estrutura hierárquica por ramificações para o modo Trilha (preserva árvores e bifurcações clínicas em qualquer etapa)
-  const arvoreTrilha = useMemo(() => {
-    if (!nos || nos.length === 0) {
-      return { 
-        raiz: null, 
-        troncoComum: [] as { no: NoFluxogramaComplexo; ramoEntrada?: RamoFluxogramaComplexo; numeroPasso: number }[],
-        noBifurcacao: null as NoFluxogramaComplexo | null,
-        caminhos: [] as {
-          id: string;
-          rotulo: string;
-          cor: string;
-          passos: { no: NoFluxogramaComplexo; ramoEntrada?: RamoFluxogramaComplexo; numeroPasso: number }[];
-        }[], 
-        avulsos: [] as NoFluxogramaComplexo[] 
-      };
-    }
-
-    const raiz = nos.find(n => n.id === noInicialId) || nos[0];
+  // Ordem lógica BFS para revelar nó por nó com 1 toque
+  const ordemNosIds = useMemo(() => {
+    if (nos.length === 0) return [];
     const visitados = new Set<string>();
-    visitados.add(raiz.id);
+    const fila: string[] = [noInicialId];
+    const ordem: string[] = [];
 
-    // 1. Percorre o tronco comum inicial (passos sequenciais até encontrar uma bifurcação ou o fim)
-    const troncoComum: { no: NoFluxogramaComplexo; ramoEntrada?: RamoFluxogramaComplexo; numeroPasso: number }[] = [
-      { no: raiz, ramoEntrada: undefined, numeroPasso: 1 }
-    ];
+    while (fila.length > 0) {
+      const atualId = fila.shift()!;
+      if (!atualId || visitados.has(atualId)) continue;
+      const noObj = nos.find(n => n.id === atualId);
+      if (!noObj) continue;
 
-    let noAtual = raiz;
-    let passosContador = 1;
+      visitados.add(atualId);
+      ordem.push(atualId);
 
-    // Se o nó atual tiver exatamente 1 ramo válido, avançamos pelo tronco comum
-    while (Array.isArray(noAtual.ramos) && noAtual.ramos.length === 1) {
-      const unicoRamo = noAtual.ramos[0];
-      const prox = nos.find(n => n.id === unicoRamo.destinoNoId);
-      if (!prox || visitados.has(prox.id)) break;
-
-      visitados.add(prox.id);
-      passosContador++;
-      troncoComum.push({ no: prox, ramoEntrada: unicoRamo, numeroPasso: passosContador });
-      noAtual = prox;
-    }
-
-    // 2. Se o nó onde o tronco comum parou tiver múltiplos ramos (> 1), ele é o Ponto de Bifurcação Clínica!
-    let noBifurcacao: NoFluxogramaComplexo | null = null;
-    const caminhos: {
-      id: string;
-      rotulo: string;
-      cor: string;
-      passos: { no: NoFluxogramaComplexo; ramoEntrada?: RamoFluxogramaComplexo; numeroPasso: number }[];
-    }[] = [];
-
-    if (Array.isArray(noAtual.ramos) && noAtual.ramos.length > 1) {
-      noBifurcacao = noAtual;
-
-      noAtual.ramos.forEach((ramoBifurcacao, idx) => {
-        const destinoRamo = nos.find(n => n.id === ramoBifurcacao.destinoNoId);
-        if (!destinoRamo) return;
-
-        const passosDoCaminho: { no: NoFluxogramaComplexo; ramoEntrada?: RamoFluxogramaComplexo; numeroPasso: number }[] = [];
-        const filaCaminho: { no: NoFluxogramaComplexo; ramoEntrada?: RamoFluxogramaComplexo }[] = [
-          { no: destinoRamo, ramoEntrada: ramoBifurcacao }
-        ];
-
-        let passoCaminhoContador = passosContador + 1;
-
-        while (filaCaminho.length > 0) {
-          const item = filaCaminho.shift()!;
-          if (visitados.has(item.no.id)) continue;
-          visitados.add(item.no.id);
-          passosDoCaminho.push({
-            no: item.no,
-            ramoEntrada: item.ramoEntrada,
-            numeroPasso: passoCaminhoContador++,
-          });
-
-          if (Array.isArray(item.no.ramos)) {
-            for (const r of item.no.ramos) {
-              const prox = nos.find(n => n.id === r.destinoNoId);
-              if (prox && !visitados.has(prox.id)) {
-                filaCaminho.push({ no: prox, ramoEntrada: r });
-              }
-            }
-          }
+      (noObj.ramos || []).forEach(r => {
+        if (r.destinoNoId && !visitados.has(r.destinoNoId)) {
+          fila.push(r.destinoNoId);
         }
-
-        caminhos.push({
-          id: ramoBifurcacao.id,
-          rotulo: ramoBifurcacao.rotulo || `Ramo ${idx + 1}`,
-          cor: ramoBifurcacao.cor || 'verde',
-          passos: passosDoCaminho,
-        });
       });
     }
 
-    // 3. Nós avulsos ou desconectados
-    const avulsos = nos.filter(n => !visitados.has(n.id));
+    // Adicionar eventuais nós desconectados
+    nos.forEach(n => {
+      if (!visitados.has(n.id)) {
+        visitados.add(n.id);
+        ordem.push(n.id);
+      }
+    });
 
-    return { raiz, troncoComum, noBifurcacao, caminhos, avulsos };
+    return ordem;
   }, [nos, noInicialId]);
 
-  const handleToggleExibirDicas = () => {
-    setExibirDicas(prev => {
-      const novo = !prev;
-      StorageService.setExibirDicas(novo);
-      return novo;
-    });
+  // Nós que começam ocluídos no Modo Estudo Ativo:
+  // Se houver > 1 nó, o nó raiz (quadro inicial/suspeita) dá o ponto de partida e todas as decisões/condutas seguintes começam ocluídas.
+  // Se houver apenas 1 nó, ele próprio começa ocluído.
+  const nosOcultaveisPadrao = useMemo(() => {
+    if (ordemNosIds.length <= 1) return [...ordemNosIds];
+    return ordemNosIds.slice(1);
+  }, [ordemNosIds]);
+
+  const [modoEstudo, setModoEstudo] = useState<'ativo' | 'completo'>('ativo');
+  const [nosRevelados, setNosRevelados] = useState<Record<string, boolean>>({});
+  const [exibirDicas, setExibirDicas] = useState<boolean>(() => StorageService.getExibirDicas());
+
+  // Resetar ao trocar de card/fluxograma
+  useEffect(() => {
+    setNosRevelados({});
+    setModoEstudo('ativo');
+  }, [dadosNormalizados.id, card?.id]);
+
+  const isNoRevelado = (noId: string) => {
+    if (modoEstudo === 'completo') return true;
+    if (ordemNosIds.length > 1 && noId === noInicialId && nosRevelados[noId] === undefined) {
+      return true;
+    }
+    return !!nosRevelados[noId];
   };
 
-  // Redefinir quando o fluxograma mudar (ex: navegando entre cards numa sessão de revisão)
-  useEffect(() => {
-    const inicial: Record<string, boolean> = {};
-    const root = fluxograma?.noInicialId || (fluxograma?.nos && fluxograma.nos[0]?.id) || '';
-    if (root) inicial[root] = true;
-    setNosRevelados(inicial);
-    setNoSelecionadoDetalheId(root);
-    setMostrarGavetaDetalhes(false);
-    setFiltroRamoId('todos');
-    setMenuMaisAcoesAberto(false);
-    concluiuRef.current = false;
-    jaCentralizouInicialmente.current = false;
-    if (trilhaScrollRef.current) {
-      trilhaScrollRef.current.scrollTop = 0;
-    }
-  }, [fluxograma?.id, fluxograma?.noInicialId]);
-
-  // Redefinir topo da rolagem ao alternar para o modo Trilha
-  useEffect(() => {
-    if (modoExibicao === 'lista' && trilhaScrollRef.current) {
-      trilhaScrollRef.current.scrollTop = 0;
-    }
-  }, [modoExibicao]);
-
-  // Limpeza de estado de arraste ao alternar entre os modos Canvas e Trilha
-  // Garante que a transição seja imediata e nunca fique travada
-  useEffect(() => {
-    setArrastandoCanvas(false);
-    panRef.current.ativo = false;
-    if (panRef.current.rafId) {
-      cancelAnimationFrame(panRef.current.rafId);
-      panRef.current.rafId = null;
-    }
-    if (modoExibicao === 'canvas' && contentLayerRef.current) {
-      contentLayerRef.current.style.transform = `translate3d(${panOffsetRef.current.x}px, ${panOffsetRef.current.y}px, 0) scale(${zoomRef.current})`;
-    }
-  }, [modoExibicao]);
-
-  // Trilha ativa de decisões médicas (Pathfinder breadcrumb)
-  const trilhaDecisao = useMemo(() => {
-    if (!noSelecionadoDetalheId || nos.length === 0) return [];
-    const caminho: { no: NoFluxogramaComplexo; ramoEntrada?: RamoFluxogramaComplexo }[] = [];
-    let atualId: string | null = noSelecionadoDetalheId;
-    const visitados = new Set<string>();
-
-    while (atualId && !visitados.has(atualId)) {
-      visitados.add(atualId);
-      const noAtual = nos.find(n => n.id === atualId);
-      if (!noAtual) break;
-
-      let paiEncontrado: NoFluxogramaComplexo | undefined;
-      let ramoEncontrado: RamoFluxogramaComplexo | undefined;
-
-      for (const n of nos) {
-        const r = n.ramos?.find(ramo => ramo.destinoNoId === atualId);
-        if (r) {
-          paiEncontrado = n;
-          ramoEncontrado = r;
-          break;
-        }
-      }
-
-      caminho.unshift({ no: noAtual, ramoEntrada: ramoEncontrado });
-      atualId = paiEncontrado ? paiEncontrado.id : null;
-    }
-
-    return caminho;
-  }, [noSelecionadoDetalheId, nos]);
-
-  // Tema visual dinâmico do Canvas (Dark, Light Confortável, Blueprint Moderno)
-  const [themeId, setThemeId] = useState<FlowchartThemeId>(getStoredFlowchartTheme);
-  const currentTheme = FLOWCHART_THEMES[themeId] || FLOWCHART_THEMES.dark;
-
-  const handleTrocarTema = (novoTema: FlowchartThemeId) => {
-    setThemeId(novoTema);
-    setStoredFlowchartTheme(novoTema);
-  };
-
-  // Ciclo rápido de tema em 1 único botão compacto (Light -> Dark -> Blueprint)
-  const ciclarTema = () => {
-    const temas: FlowchartThemeId[] = ['light', 'dark', 'blueprint'];
-    const proximo = temas[(temas.indexOf(themeId) + 1) % temas.length];
-    handleTrocarTema(proximo);
-  };
-
-  // Efeito de centralização automática inicial apenas uma vez ao montar
-  const jaCentralizouInicialmente = useRef(false);
-
-  const centralizarNoOrigem = useCallback(() => {
-    const raiz = nos.find(n => n.id === noInicialId) || nos[0];
-    if (!raiz || !canvasRef.current) return;
-    const rect = canvasRef.current.getBoundingClientRect();
-    const canvasW = rect.width || 800;
-    const canvasH = rect.height || 560;
-
-    const currentZoom = zoomRef.current;
-    const isMobile = window.innerWidth < 640;
-    const zoomEfetivo = isMobile ? Math.min(currentZoom, 0.58) : currentZoom;
-
-    const raizCentroX = (raiz.posicaoX ?? 520) + 120;
-    const raizCentroY = (raiz.posicaoY ?? 50) + 55;
-
-    // Centraliza perfeitamente no eixo X e posiciona no terço superior no eixo Y
-    const novoPanX = Math.round(canvasW / 2 - raizCentroX * zoomEfetivo);
-    const novoPanY = Math.round((isMobile ? canvasH * 0.22 : canvasH / 3) - raizCentroY * zoomEfetivo);
-
-    setPanOffset({ x: novoPanX, y: novoPanY });
-    panOffsetRef.current = { x: novoPanX, y: novoPanY };
-    panRef.current.initialPanX = novoPanX;
-    panRef.current.initialPanY = novoPanY;
-  }, [noInicialId, nos]);
+  const totalOcultaveis = nosOcultaveisPadrao.length;
+  const totalRevelados = modoEstudo === 'completo'
+    ? totalOcultaveis
+    : nosOcultaveisPadrao.filter(id => isNoRevelado(id)).length;
+  const todosRevelados = modoEstudo === 'completo' || totalRevelados >= totalOcultaveis;
 
   useEffect(() => {
-    if (!jaCentralizouInicialmente.current && nos.length > 0) {
-      if (window.innerWidth < 640) {
-        setZoom(0.55);
-      }
-      const timer = setTimeout(() => {
-        centralizarNoOrigem();
-        jaCentralizouInicialmente.current = true;
-      }, 100);
-      return () => clearTimeout(timer);
+    if (todosRevelados && onRegistrarConclusao) {
+      onRegistrarConclusao();
     }
-  }, [nos, centralizarNoOrigem]);
+  }, [todosRevelados, onRegistrarConclusao]);
 
-  // Recalcula centralização ao alternar tela cheia
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      centralizarNoOrigem();
-    }, 100);
-    return () => clearTimeout(timer);
-  }, [isFullScreen, centralizarNoOrigem]);
-
-  // Listeners nativos de Touch para suporte fluido a gesto de pinça (Pinch to Zoom) e Pan
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    let isPinching = false;
-    let wasPinching = false;
-    let isTouchPanning = false;
-    let lastPinchDist = 0;
-    let lastFocalX = 0;
-    let lastFocalY = 0;
-    let touchStartX = 0;
-    let touchStartY = 0;
-    let initialTouchPanX = 0;
-    let initialTouchPanY = 0;
-    let rafId: number | null = null;
-    let lastTapTime = 0;
-    let lastTapPos = { x: 0, y: 0 };
-
-    const updateTransformDirect = (panX: number, panY: number, currentZoom: number) => {
-      if (contentLayerRef.current) {
-        contentLayerRef.current.style.transform = `translate3d(${panX}px, ${panY}px, 0) scale(${currentZoom})`;
-      }
-    };
-
-    const onTouchStart = (e: TouchEvent) => {
-      if (e.touches.length === 2) {
-        // Gesto de Pinça com 2 dedos
-        e.preventDefault();
-        isPinching = true;
-        wasPinching = true;
-        isTouchPanning = false;
-        setArrastandoCanvas(true);
-
-        const t1 = e.touches[0];
-        const t2 = e.touches[1];
-        const rect = canvas.getBoundingClientRect();
-        lastFocalX = (t1.clientX + t2.clientX) / 2 - rect.left;
-        lastFocalY = (t1.clientY + t2.clientY) / 2 - rect.top;
-        lastPinchDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
-
-        mostrarIndicadorZoom();
-      } else if (e.touches.length === 1) {
-        const target = e.target as HTMLElement;
-        const isInteractive = target.closest('[data-no-id]') || target.closest('button');
-
-        isPinching = false;
-        wasPinching = false;
-        const t = e.touches[0];
-        touchStartX = t.clientX;
-        touchStartY = t.clientY;
-        initialTouchPanX = panOffsetRef.current.x;
-        initialTouchPanY = panOffsetRef.current.y;
-
-        if (!isInteractive) {
-          isTouchPanning = true;
-          setArrastandoCanvas(true);
-
-          // Detecção de Toque Duplo no fundo do canvas para centralizar
-          const now = Date.now();
-          const distFromLastTap = Math.hypot(t.clientX - lastTapPos.x, t.clientY - lastTapPos.y);
-          if (now - lastTapTime < 300 && distFromLastTap < 30) {
-            centralizarNoOrigem();
-            lastTapTime = 0;
-          } else {
-            lastTapTime = now;
-            lastTapPos = { x: t.clientX, y: t.clientY };
-          }
-        } else {
-          isTouchPanning = false;
-        }
-      }
-    };
-
-    const onTouchMove = (e: TouchEvent) => {
-      if (e.touches.length === 2) {
-        // Movimento de Pinça Multi-touch: Ponto focal ancorado continuamente sem derivação
-        e.preventDefault();
-        const t1 = e.touches[0];
-        const t2 = e.touches[1];
-        const rect = canvas.getBoundingClientRect();
-        const currFocalX = (t1.clientX + t2.clientX) / 2 - rect.left;
-        const currFocalY = (t1.clientY + t2.clientY) / 2 - rect.top;
-        const currDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
-
-        if (lastPinchDist > 0 && currDist > 0) {
-          const scaleFactor = currDist / lastPinchDist;
-          const prevZoom = zoomRef.current;
-          const prevPan = panOffsetRef.current;
-
-          // Limite seguro de zoom (25% até 220%)
-          const nextZoom = Math.max(0.25, Math.min(2.2, prevZoom * scaleFactor));
-
-          // Ponto no espaço do diagrama sob o centro dos dedos antes do zoom
-          const worldX = (currFocalX - prevPan.x) / prevZoom;
-          const worldY = (currFocalY - prevPan.y) / prevZoom;
-
-          // Deslocamento que garante que o ponto focal permaneça 100% ancorado sob os dedos
-          const nextPanX = currFocalX - worldX * nextZoom;
-          const nextPanY = currFocalY - worldY * nextZoom;
-
-          // Atualiza referências imediatamente em memória
-          zoomRef.current = nextZoom;
-          panOffsetRef.current = { x: nextPanX, y: nextPanY };
-          lastPinchDist = currDist;
-          lastFocalX = currFocalX;
-          lastFocalY = currFocalY;
-
-          // Atualização visual imediata
-          updateTransformDirect(nextPanX, nextPanY, nextZoom);
-
-          if (rafId) cancelAnimationFrame(rafId);
-          rafId = requestAnimationFrame(() => {
-            setZoom(Number(nextZoom.toFixed(3)));
-            setPanOffset({ x: Math.round(nextPanX), y: Math.round(nextPanY) });
-          });
-
-          mostrarIndicadorZoom();
-        } else {
-          lastPinchDist = currDist;
-          lastFocalX = currFocalX;
-          lastFocalY = currFocalY;
-        }
-      } else if (e.touches.length === 1 && isTouchPanning && !wasPinching) {
-        const t = e.touches[0];
-        const dx = t.clientX - touchStartX;
-        const dy = t.clientY - touchStartY;
-
-        e.preventDefault();
-        const nextPanX = initialTouchPanX + dx;
-        const nextPanY = initialTouchPanY + dy;
-
-        panOffsetRef.current = { x: nextPanX, y: nextPanY };
-        updateTransformDirect(nextPanX, nextPanY, zoomRef.current);
-
-        if (rafId) cancelAnimationFrame(rafId);
-        rafId = requestAnimationFrame(() => {
-          setPanOffset({ x: Math.round(nextPanX), y: Math.round(nextPanY) });
-        });
-      }
-    };
-
-    const onTouchEnd = (e: TouchEvent) => {
-      if (e.touches.length === 2) {
-        const t1 = e.touches[0];
-        const t2 = e.touches[1];
-        const rect = canvas.getBoundingClientRect();
-        lastFocalX = (t1.clientX + t2.clientX) / 2 - rect.left;
-        lastFocalY = (t1.clientY + t2.clientY) / 2 - rect.top;
-        lastPinchDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
-      } else if (e.touches.length === 1) {
-        if (isPinching || wasPinching) {
-          isPinching = false;
-          isTouchPanning = false;
-          lastPinchDist = 0;
-        } else {
-          isTouchPanning = true;
-          const t = e.touches[0];
-          touchStartX = t.clientX;
-          touchStartY = t.clientY;
-          initialTouchPanX = panOffsetRef.current.x;
-          initialTouchPanY = panOffsetRef.current.y;
-        }
-      } else {
-        isPinching = false;
-        wasPinching = false;
-        isTouchPanning = false;
-        lastPinchDist = 0;
-        setArrastandoCanvas(false);
-        setZoom(Number(zoomRef.current.toFixed(3)));
-        setPanOffset({ x: Math.round(panOffsetRef.current.x), y: Math.round(panOffsetRef.current.y) });
-      }
-    };
-
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const rect = canvas.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-
-      const currentZoom = zoomRef.current;
-      const currentPan = panOffsetRef.current;
-      const zoomFactor = e.ctrlKey ? Math.exp(-e.deltaY * 0.01) : Math.exp(-e.deltaY * 0.0015);
-      const nextZoom = Math.max(0.25, Math.min(2.2, currentZoom * zoomFactor));
-
-      const worldX = (mouseX - currentPan.x) / currentZoom;
-      const worldY = (mouseY - currentPan.y) / currentZoom;
-
-      const nextPanX = mouseX - worldX * nextZoom;
-      const nextPanY = mouseY - worldY * nextZoom;
-
-      zoomRef.current = nextZoom;
-      panOffsetRef.current = { x: nextPanX, y: nextPanY };
-
-      updateTransformDirect(nextPanX, nextPanY, nextZoom);
-
-      if (rafId) cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => {
-        setZoom(Number(nextZoom.toFixed(3)));
-        setPanOffset({ x: Math.round(nextPanX), y: Math.round(nextPanY) });
+  const toggleNo = (noId: string) => {
+    if (modoEstudo === 'completo') {
+      // Se estava em visão completa e tocou num nó para testar, volta para ativo ocultando este nó
+      const estadoTodos: Record<string, boolean> = {};
+      ordemNosIds.forEach(id => {
+        estadoTodos[id] = id !== noId;
       });
-
-      mostrarIndicadorZoom();
-    };
-
-    canvas.addEventListener('touchstart', onTouchStart, { passive: false });
-    canvas.addEventListener('touchmove', onTouchMove, { passive: false });
-    canvas.addEventListener('touchend', onTouchEnd, { passive: false });
-    canvas.addEventListener('touchcancel', onTouchEnd, { passive: false });
-    canvas.addEventListener('wheel', onWheel, { passive: false });
-
-    return () => {
-      if (rafId) cancelAnimationFrame(rafId);
-      canvas.removeEventListener('touchstart', onTouchStart);
-      canvas.removeEventListener('touchmove', onTouchMove);
-      canvas.removeEventListener('touchend', onTouchEnd);
-      canvas.removeEventListener('touchcancel', onTouchEnd);
-      canvas.removeEventListener('wheel', onWheel);
-    };
-  }, [isFullScreen, centralizarNoOrigem, modoExibicao]);
-
-  // Handlers de Pan Ultrassuave com Pointer Events (Mouse Desktop) & RequestAnimationFrame
-  const handleCanvasPointerDown = (e: React.PointerEvent) => {
-    // Se for evento de toque, é tratado exclusivamente pelos listeners nativos multi-touch
-    if (e.pointerType === 'touch') return;
-
-    // Ignora se clicou em um nó ou elemento clicável
-    if ((e.target as HTMLElement).closest('[data-no-id]') || (e.target as HTMLElement).closest('button')) {
+      setModoEstudo('ativo');
+      setNosRevelados(estadoTodos);
       return;
     }
 
-    try {
-      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    } catch (_) {}
-
-    setArrastandoCanvas(true);
-    panRef.current = {
-      ativo: true,
-      startX: e.clientX,
-      startY: e.clientY,
-      initialPanX: panOffsetRef.current.x,
-      initialPanY: panOffsetRef.current.y,
-      rafId: null,
-    };
+    setNosRevelados(prev => ({
+      ...prev,
+      [noId]: !isNoRevelado(noId),
+    }));
   };
 
-  const handleCanvasPointerMove = (e: React.PointerEvent) => {
-    if (e.pointerType === 'touch') return;
-    if (!panRef.current.ativo) return;
-
-    const dx = e.clientX - panRef.current.startX;
-    const dy = e.clientY - panRef.current.startY;
-
-    const nextPanX = Math.round(panRef.current.initialPanX + dx);
-    const nextPanY = Math.round(panRef.current.initialPanY + dy);
-
-    panOffsetRef.current = { x: nextPanX, y: nextPanY };
-
-    if (contentLayerRef.current) {
-      contentLayerRef.current.style.transform = `translate3d(${nextPanX}px, ${nextPanY}px, 0) scale(${zoomRef.current})`;
+  const revelarProximoNo = () => {
+    const proximoId = ordemNosIds.find(id => !isNoRevelado(id));
+    if (proximoId) {
+      setNosRevelados(prev => ({ ...prev, [proximoId]: true }));
+    } else {
+      setModoEstudo('completo');
     }
+  };
 
-    if (panRef.current.rafId) {
-      cancelAnimationFrame(panRef.current.rafId);
-    }
-
-    panRef.current.rafId = requestAnimationFrame(() => {
-      setPanOffset({ x: nextPanX, y: nextPanY });
+  const revelarTudo = () => {
+    const todos: Record<string, boolean> = {};
+    ordemNosIds.forEach(id => {
+      todos[id] = true;
     });
+    setNosRevelados(todos);
+    setModoEstudo('completo');
   };
 
-  const handleCanvasPointerUp = (e: React.PointerEvent) => {
-    if (e.pointerType === 'touch') return;
-    if (panRef.current.ativo) {
-      panRef.current.ativo = false;
-      if (panRef.current.rafId) {
-        cancelAnimationFrame(panRef.current.rafId);
-      }
-      setArrastandoCanvas(false);
-      setPanOffset({ x: panOffsetRef.current.x, y: panOffsetRef.current.y });
-      try {
-        (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-      } catch (_) {}
+  const ocultarTudo = () => {
+    setModoEstudo('ativo');
+    setNosRevelados({});
+  };
+
+  const mapaNos = useMemo(() => {
+    const map = new Map<string, NoFluxogramaComplexo>();
+    nos.forEach(n => map.set(n.id, n));
+    return map;
+  }, [nos]);
+
+  // Renderizador recursivo da Árvore Visual do Fluxograma (Diagnóstico / Rastreio / Tratamento)
+  const renderSubarvore = (
+    noId: string,
+    ancestrais: Set<string>,
+    profundidade: number = 0
+  ): React.ReactNode => {
+    const no = mapaNos.get(noId);
+    if (!no) return null;
+
+    if (ancestrais.has(noId)) {
+      return (
+        <div className="px-3 py-1.5 rounded-xl bg-zinc-100 border border-zinc-200 text-[11px] font-medium text-zinc-600 text-center mx-auto max-w-xs">
+          ↩ Retorna para: <strong className="font-semibold text-zinc-800">{no.titulo}</strong>
+        </div>
+      );
     }
-  };
 
-  // Revelação interativa ao clicar em um nó
-  const handleRevelarNo = (noId: string) => {
-    setNosRevelados(prev => {
-      const novo = { ...prev, [noId]: true };
-      return novo;
-    });
-    setNoSelecionadoDetalheId(noId);
-  };
+    const novosAncestrais = new Set(ancestrais);
+    novosAncestrais.add(noId);
 
-  // Revelação de Próximo Passo Sequencial (Estilo Flashcard de Fluxograma Passo a Passo)
-  const handleRevelarProximoPasso = () => {
-    // 1. Achar todos os nós já revelados
-    const idsRevelados = Object.keys(nosRevelados).filter(k => nosRevelados[k]);
-    
-    // 2. Procurar nos ramos que saem dos nós revelados se há algum destino ainda não revelado
-    let proximoNoId: string | null = null;
-    for (const idRev of idsRevelados) {
-      const noOrigem = nos.find(n => n.id === idRev);
-      if (noOrigem && Array.isArray(noOrigem.ramos)) {
-        for (const ramo of noOrigem.ramos) {
-          if (ramo.destinoNoId && !nosRevelados[ramo.destinoNoId]) {
-            proximoNoId = ramo.destinoNoId;
-            break;
+    const revelado = isNoRevelado(no.id);
+    const ehRaiz = no.id === noInicialId && profundidade === 0;
+    const ramosValidos = (no.ramos || []).filter(r => r.destinoNoId && mapaNos.has(r.destinoNoId));
+
+    // Acento sutil e semântico (sem textos "enche-linguiça" de tipo de caixa)
+    const estiloCaixaRevelada = ehRaiz
+      ? comfortMode
+        ? 'bg-[#F3EFE8] border-[#D6CFC2] text-stone-900 border-l-4 border-l-blue-600'
+        : 'bg-blue-50/35 border-blue-200/90 text-zinc-900 border-l-4 border-l-blue-600'
+      : no.tipo === 'alerta'
+      ? 'bg-rose-50/45 border-rose-200/90 text-zinc-900 border-l-4 border-l-rose-500'
+      : no.tipo === 'decisao'
+      ? 'bg-amber-50/40 border-amber-200/90 text-zinc-900 border-l-4 border-l-amber-500'
+      : comfortMode
+      ? 'bg-white border-[#E2DDD3] text-stone-900 border-l-4 border-l-emerald-600'
+      : 'bg-white border-zinc-200/90 text-zinc-900 border-l-4 border-l-emerald-600';
+
+    // Detectar se múltiplos ramos deste nó convergem para um mesmo nó neto (unificação de caminhos)
+    let noConvergenteId: string | null = null;
+    if (ramosValidos.length >= 2) {
+      const contagemDestinosNetos = new Map<string, number>();
+      ramosValidos.forEach(r => {
+        const filho = mapaNos.get(r.destinoNoId);
+        if (filho && filho.ramos.length === 1) {
+          const netoId = filho.ramos[0].destinoNoId;
+          if (netoId) {
+            contagemDestinosNetos.set(netoId, (contagemDestinosNetos.get(netoId) || 0) + 1);
           }
         }
-      }
-      if (proximoNoId) break;
+      });
+      contagemDestinosNetos.forEach((count, id) => {
+        if (count >= 2 && !noConvergenteId) {
+          noConvergenteId = id;
+        }
+      });
     }
 
-    // 3. Fallback: se não encontrou via ramo direto, pega o próximo nó pendente na lista
-    if (!proximoNoId) {
-      const proximo = nos.find(n => !nosRevelados[n.id]);
-      if (proximo) proximoNoId = proximo.id;
-    }
-
-    if (proximoNoId) {
-      handleRevelarNo(proximoNoId);
-      const noAlvo = nos.find(n => n.id === proximoNoId);
-      if (noAlvo && canvasRef.current) {
-        // Suavemente centraliza no nó revelado
-        const rect = canvasRef.current.getBoundingClientRect();
-        const canvasW = rect.width || 800;
-        const canvasH = rect.height || 560;
-        const noCentroX = (noAlvo.posicaoX ?? 520) + 120;
-        const noCentroY = (noAlvo.posicaoY ?? 50) + 55;
-        const novoPanX = Math.round(canvasW / 2 - noCentroX * zoom);
-        const novoPanY = Math.round(canvasH / 2.5 - noCentroY * zoom);
-        setPanOffset({ x: novoPanX, y: novoPanY });
-        panRef.current.initialPanX = novoPanX;
-        panRef.current.initialPanY = novoPanY;
-      }
-    }
-  };
-
-  const handleRevelarTodos = () => {
-    const todos: Record<string, boolean> = {};
-    nos.forEach(n => { todos[n.id] = true; });
-    setNosRevelados(todos);
-  };
-
-  const handleReiniciarDesafio = () => {
-    const apenasInicial: Record<string, boolean> = {};
-    if (noInicialId) apenasInicial[noInicialId] = true;
-    else if (nos[0]?.id) apenasInicial[nos[0].id] = true;
-    setNosRevelados(apenasInicial);
-    setNoSelecionadoDetalheId(noInicialId || nos[0]?.id || null);
-    centralizarNoOrigem();
-  };
-
-  if (nos.length === 0) {
     return (
-      <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-center text-xs text-slate-500">
-        Nenhum bloco de fluxograma disponível neste card.
+      <div className="flex flex-col items-center w-full">
+        {/* Caixa Clínica do Fluxograma */}
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => toggleNo(no.id)}
+          onKeyDown={e => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              toggleNo(no.id);
+            }
+          }}
+          className={`w-full max-w-xl rounded-2xl border p-3.5 sm:p-4 text-left transition-colors cursor-pointer select-none touch-instant shadow-[0_1px_2px_rgba(0,0,0,0.03)] ${
+            revelado
+              ? `${estiloCaixaRevelada} hover:border-zinc-300`
+              : 'bg-zinc-800 hover:bg-zinc-700 border-zinc-900 text-white'
+          }`}
+        >
+          {revelado ? (
+            <div className="space-y-1.5 animate-card-reveal">
+              <div className="flex items-start justify-between gap-2">
+                <div className="text-[13.5px] sm:text-[14.5px] font-semibold text-zinc-900 leading-snug flex-1">
+                  <FormattedClinicalText text={no.titulo} />
+                </div>
+                {!ehRaiz && (
+                  <span className="text-[10px] font-medium text-zinc-400 shrink-0 mt-0.5">
+                    Ocultar
+                  </span>
+                )}
+              </div>
+
+              {no.descricao && (
+                <div
+                  className={`text-[13px] sm:text-[13.5px] text-zinc-700 font-normal leading-[1.6] ${
+                    no.titulo ? 'pt-1.5 border-t border-zinc-200/60' : ''
+                  }`}
+                >
+                  <FormattedClinicalText text={no.descricao} />
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="py-1 flex flex-col items-center justify-center text-center space-y-1">
+              <div className="flex items-center gap-2 text-xs sm:text-[13px] font-semibold text-white">
+                <Eye className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>Toque para revelar esta etapa do fluxograma</span>
+              </div>
+              {exibirDicas && no.dica && (
+                <span className="text-[11px] text-amber-300/95 font-medium">
+                  💡 Pista: {no.dica}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* CASO 1: Ramo Único (Conexão Vertical Direta) */}
+        {ramosValidos.length === 1 && (
+          <div className="flex flex-col items-center w-full">
+            <div className="h-2.5 w-0.5 bg-zinc-300" />
+            {ramosValidos[0].rotulo && (
+              <>
+                <span
+                  className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold border shadow-3xs max-w-xs text-center leading-tight ${
+                    obterEstiloSetaRamo(ramosValidos[0].cor, 0).pill
+                  }`}
+                >
+                  {ramosValidos[0].rotulo}
+                </span>
+                <div className="h-1.5 w-0.5 bg-zinc-300" />
+              </>
+            )}
+            <ArrowDown className="w-3.5 h-3.5 text-zinc-400 -mt-1 mb-0.5" strokeWidth={2.2} />
+            {renderSubarvore(ramosValidos[0].destinoNoId, novosAncestrais, profundidade + 1)}
+          </div>
+        )}
+
+        {/* CASO 2: Bifurcação / Múltiplos Ramos (Ex: Sim vs Não, Alto vs Baixo Risco) */}
+        {ramosValidos.length >= 2 && (
+          <div className="flex flex-col items-center w-full">
+            {/* Haste vertical saindo da caixa mãe */}
+            <div className="h-3 w-0.5 bg-zinc-300" />
+
+            {/* Barra horizontal conectora de bifurcação */}
+            <div className="w-full relative pt-2">
+              <div className="hidden sm:block absolute top-0 left-[16%] right-[16%] h-0.5 bg-zinc-300 rounded-full" />
+
+              <div
+                className={`grid gap-3 sm:gap-3.5 w-full items-start ${
+                  ramosValidos.length === 2
+                    ? 'grid-cols-1 sm:grid-cols-2'
+                    : ramosValidos.length === 3
+                    ? 'grid-cols-1 md:grid-cols-3'
+                    : 'grid-cols-1 sm:grid-cols-2'
+                }`}
+              >
+                {ramosValidos.map((ramo, rIdx) => {
+                  const estiloSeta = obterEstiloSetaRamo(ramo.cor, rIdx);
+                  const noFilho = mapaNos.get(ramo.destinoNoId);
+
+                  // Se este filho converge para `noConvergenteId`, renderizamos o filho sem repetir o neto dentro da coluna
+                  const filhoConvergeNoNeto =
+                    noConvergenteId &&
+                    noFilho &&
+                    noFilho.ramos.length === 1 &&
+                    noFilho.ramos[0].destinoNoId === noConvergenteId;
+
+                  const filhoAjustado: NoFluxogramaComplexo | undefined =
+                    filhoConvergeNoNeto && noFilho
+                      ? { ...noFilho, ramos: [] }
+                      : noFilho;
+
+                  return (
+                    <div
+                      key={ramo.id || `${no.id}-r-${rIdx}`}
+                      className="flex flex-col items-center w-full"
+                    >
+                      {/* Seta com Condição do Ramo */}
+                      <div className="flex flex-col items-center mb-1">
+                        {ramo.rotulo ? (
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] sm:text-xs font-semibold border shadow-3xs text-center leading-snug ${estiloSeta.pill}`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${estiloSeta.dot}`} />
+                            <span>{ramo.rotulo}</span>
+                          </span>
+                        ) : (
+                          <span className="text-[10.5px] font-semibold text-zinc-400 uppercase tracking-wider">
+                            Caminho {rIdx + 1}
+                          </span>
+                        )}
+                        <ArrowDown className={`w-3.5 h-3.5 mt-0.5 ${estiloSeta.arrow}`} strokeWidth={2.2} />
+                      </div>
+
+                      {/* Subárvore do ramo */}
+                      {filhoConvergeNoNeto && filhoAjustado ? (
+                        <div className="w-full flex flex-col items-center">
+                          {(() => {
+                            // Renderiza apenas a caixa do filho e a haste de saída para a convergência
+                            const revFilho = isNoRevelado(filhoAjustado.id);
+                            return (
+                              <>
+                                <div
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={() => toggleNo(filhoAjustado.id)}
+                                  className={`w-full rounded-2xl border p-3.5 text-left transition-colors cursor-pointer select-none touch-instant ${
+                                    revFilho
+                                      ? 'bg-white border-zinc-200/90 text-zinc-900 border-l-4 border-l-emerald-600'
+                                      : 'bg-zinc-800 hover:bg-zinc-700 border-zinc-900 text-white'
+                                  }`}
+                                >
+                                  {revFilho ? (
+                                    <div className="space-y-1 animate-card-reveal">
+                                      <div className="text-[13px] sm:text-[14px] font-semibold text-zinc-900 leading-snug">
+                                        <FormattedClinicalText text={filhoAjustado.titulo} />
+                                      </div>
+                                      {filhoAjustado.descricao && (
+                                        <div className="text-[12.5px] sm:text-[13px] text-zinc-700 leading-[1.58] pt-1 border-t border-zinc-100">
+                                          <FormattedClinicalText text={filhoAjustado.descricao} />
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <div className="py-1 flex items-center justify-center gap-1.5 text-xs font-semibold text-white">
+                                      <Eye className="w-3.5 h-3.5 text-emerald-400" />
+                                      <span>Toque para revelar</span>
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="h-3 w-0.5 bg-zinc-300" />
+                              </>
+                            );
+                          })()}
+                        </div>
+                      ) : (
+                        renderSubarvore(ramo.destinoNoId, novosAncestrais, profundidade + 1)
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Se houve convergência de ramos para um nó em comum, renderiza o nó convergente centralizado abaixo */}
+            {noConvergenteId && (
+              <div className="flex flex-col items-center w-full mt-1">
+                <div className="hidden sm:block w-[68%] h-0.5 bg-zinc-300 rounded-full" />
+                <ArrowDown className="w-3.5 h-3.5 text-zinc-400 mt-0.5 mb-0.5" strokeWidth={2.2} />
+                {renderSubarvore(noConvergenteId, novosAncestrais, profundidade + 2)}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
+  };
+
+  // Identificar nós órfãos (caso algum card antigo tenha nós sem conexão a partir da raiz)
+  const nosAlcanceRaiz = useMemo(() => {
+    const visitados = new Set<string>();
+    const fila = [noInicialId];
+    while (fila.length > 0) {
+      const id = fila.shift()!;
+      if (!id || visitados.has(id)) continue;
+      visitados.add(id);
+      const n = mapaNos.get(id);
+      n?.ramos.forEach(r => {
+        if (r.destinoNoId && !visitados.has(r.destinoNoId)) fila.push(r.destinoNoId);
+      });
+    }
+    return visitados;
+  }, [noInicialId, mapaNos]);
+
+  const nosDesconectados = useMemo(
+    () => nos.filter(n => !nosAlcanceRaiz.has(n.id)),
+    [nos, nosAlcanceRaiz]
+  );
+
+  const perguntaLimpa = limparPerguntaNorteadora(
+    perguntaGatilho || card?.perguntaGatilho,
+    tituloContexto || card?.titulo || dadosNormalizados.titulo
+  );
+
+  // Conteúdo central do Fluxograma (usado tanto inline no ReviewSessionModal quanto no modo Modal)
+  const conteudoFluxograma = (
+    <div className="space-y-3 text-left">
+      {/* Pergunta / Tema Norteador Direto ao Ponto */}
+      {perguntaLimpa && (
+        <div
+          className={`p-3.5 rounded-2xl border text-[13.5px] sm:text-[14.5px] font-medium text-zinc-800 leading-[1.6] ${
+            comfortMode ? 'bg-[#F3EFE8] border-[#E4DECF]' : 'bg-zinc-50/80 border-zinc-200/80'
+          }`}
+        >
+          <FormattedClinicalText text={perguntaLimpa} />
+        </div>
+      )}
+
+      {/* Barra de Controle Minimalista: Alternar entre Praticar Oclusão vs Revisão Completa */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div
+          className={`inline-flex items-center p-0.5 rounded-xl border ${
+            comfortMode ? 'bg-[#EFECE6] border-[#E2DDD3]' : 'bg-zinc-100 border-zinc-200/80'
+          }`}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              if (modoEstudo === 'completo') {
+                ocultarTudo();
+              }
+            }}
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold flex items-center gap-1.5 cursor-pointer touch-instant ${
+              modoEstudo === 'ativo' && !todosRevelados
+                ? 'bg-white text-zinc-900 shadow-3xs'
+                : 'text-zinc-600 hover:text-zinc-900'
+            }`}
+          >
+            <EyeOff className="w-3 h-3 text-indigo-600" />
+            <span>Estudo Ativo ({totalRevelados}/{totalOcultaveis})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={revelarTudo}
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold flex items-center gap-1.5 cursor-pointer touch-instant ${
+              todosRevelados
+                ? 'bg-white text-emerald-900 shadow-3xs'
+                : 'text-zinc-600 hover:text-zinc-900'
+            }`}
+          >
+            <Eye className="w-3 h-3 text-emerald-600" />
+            <span>Fluxograma Completo</span>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          {!todosRevelados ? (
+            <button
+              type="button"
+              onClick={revelarProximoNo}
+              className="px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-[11px] font-semibold flex items-center gap-1 cursor-pointer touch-instant"
+            >
+              <Sparkles className="w-3 h-3 text-amber-300" />
+              <span>+ Revelar Próximo</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={ocultarTudo}
+              className="px-2.5 py-1 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-[11px] font-semibold flex items-center gap-1 cursor-pointer touch-instant"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>Ocultar p/ Testar</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Árvore Visual do Fluxograma */}
+      <div
+        className={`p-3 sm:p-4 rounded-2xl border overflow-x-auto ${
+          comfortMode ? 'bg-[#FAF8F5] border-[#E4DECF]' : 'bg-zinc-50/50 border-zinc-200/80'
+        }`}
+      >
+        {noInicialId && mapaNos.has(noInicialId) ? (
+          renderSubarvore(noInicialId, new Set(), 0)
+        ) : (
+          <div className="text-xs text-zinc-400 text-center py-6">
+            Nenhuma etapa cadastrada neste fluxograma.
+          </div>
+        )}
+
+        {/* Etapas adicionais desconectadas (se existirem em cards legados) */}
+        {nosDesconectados.length > 0 && (
+          <div className="mt-4 pt-3 border-t border-zinc-200/70 space-y-2">
+            {nosDesconectados.map(n => (
+              <div key={n.id} className="w-full">
+                {renderSubarvore(n.id, new Set(), 1)}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  // Se NÃO for tela cheia autônoma (ou seja, está embutido dentro do ReviewSessionModal ou SimulationTrainingView),
+  // retorna diretamente o fluxograma limpo sem duplicar cabeçalhos ou barras.
+  if (!initialFullScreen) {
+    return conteudoFluxograma;
   }
 
-  const noSelecionadoObj = nos.find(n => n.id === noSelecionadoDetalheId);
-  const totalNos = nos.length;
-  const nosReveladosCount = Object.keys(nosRevelados).filter(k => nosRevelados[k]).length;
-  const todosCompletos = totalNos > 0 && nosReveladosCount >= totalNos;
-
-  // Notifica automaticamente a conclusão quando todos os passos/nós forem revelados
-  const concluiuRef = useRef(false);
-  useEffect(() => {
-    if (todosCompletos && !concluiuRef.current) {
-      concluiuRef.current = true;
-      if (onRegistrarConclusao) {
-        onRegistrarConclusao();
-      }
-    } else if (!todosCompletos) {
-      concluiuRef.current = false;
-    }
-  }, [todosCompletos, onRegistrarConclusao]);
-
-  // Tecla Escape para sair de tela cheia com facilidade
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isFullScreen) {
-        setIsFullScreen(false);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isFullScreen]);
+  // Modo Modal Autônomo (ex: quando aberto isoladamente pelo VisualOcclusionModal)
+  const infoRodada = card ? obterInfoRodadaCard(card, topico) : null;
 
   return (
-    <div 
-      ref={containerRef}
-      className={`w-full transition-all ${
-        isFullScreen 
-          ? 'fixed inset-0 z-50 h-[100dvh] max-h-[100dvh] w-full flex flex-col p-1 sm:p-2.5 overflow-hidden' 
-          : 'relative space-y-2'
-      }`}
-      style={{
-        backgroundColor: isFullScreen ? currentTheme.canvasBg : undefined
-      }}
-    >
-      {/* =================================================================== */}
-      {/* BARRA SUPERIOR UNIFICADA E DESPOLUIDA                               */}
-      {/* =================================================================== */}
-      <div className={`px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl border text-xs shadow-xs transition-colors shrink-0 ${
-        currentTheme.id === 'dark'
-          ? 'bg-slate-900/95 border-slate-800 text-white'
-          : currentTheme.id === 'blueprint'
-          ? 'bg-sky-950/95 border-sky-900 text-sky-100'
-          : 'bg-white/95 border-slate-200 text-slate-900 shadow-sm'
-      }`}>
-        <div className="flex items-center justify-between gap-1.5 sm:gap-2">
-          {/* Lado Esquerdo: Fechar + Setas de Navegação (se houver) + Contador */}
-          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 min-w-0">
+    <div className="fixed inset-0 z-50 bg-[#F7F7F5] overflow-y-auto flex flex-col justify-start touch-pan-y">
+      <div className="w-full max-w-2xl mx-auto px-2 sm:px-4 pt-2 sm:pt-3 pb-6 space-y-2 flex-1 flex flex-col">
+        {/* Barra Superior Minimalista */}
+        <div className="rounded-2xl px-3 py-2 bg-white border border-zinc-200/80 flex items-center justify-between gap-2 shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            {(onVoltarCard || onPularCard) && (
+              <div className="flex items-center p-0.5 rounded-xl bg-zinc-100/80 border border-zinc-200/70 shrink-0">
+                <button
+                  type="button"
+                  onClick={onVoltarCard}
+                  disabled={!canVoltar}
+                  className={`p-1.5 rounded-lg ${
+                    !canVoltar
+                      ? 'text-zinc-300 cursor-not-allowed'
+                      : 'text-zinc-700 hover:bg-white cursor-pointer touch-instant'
+                  }`}
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <div className="h-3.5 w-px bg-zinc-200/80 mx-0.5" />
+                <button
+                  type="button"
+                  onClick={onPularCard}
+                  className="p-1.5 rounded-lg text-zinc-700 hover:bg-white cursor-pointer touch-instant"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+            {progressoTexto && (
+              <span className="text-xs font-bold text-zinc-800 whitespace-nowrap">
+                {progressoTexto}
+              </span>
+            )}
+            {card && <EixoEmojiBadge card={card} size="sm" />}
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            {card && onEditarCard && (
+              <button
+                type="button"
+                onClick={() => onEditarCard(card)}
+                className="p-1.5 rounded-lg border border-zinc-200 bg-white text-zinc-600 hover:text-blue-600 cursor-pointer touch-instant"
+                title="Editar fluxograma"
+              >
+                <FilePenLine className="w-3.5 h-3.5" />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setExibirDicas(prev => {
+                  const n = !prev;
+                  StorageService.setExibirDicas(n);
+                  return n;
+                });
+              }}
+              className={`p-1.5 rounded-lg border cursor-pointer touch-instant ${
+                exibirDicas
+                  ? 'bg-amber-50 text-amber-800 border-amber-200'
+                  : 'bg-zinc-50 text-zinc-400 border-zinc-200'
+              }`}
+              title="Alternar dicas"
+            >
+              <Lightbulb className="w-3.5 h-3.5" />
+            </button>
             {onClose && (
               <button
                 type="button"
                 onClick={onClose}
-                title="Encerrar sessão"
-                className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 flex items-center justify-center transition-colors cursor-pointer shrink-0 border border-slate-200/80 dark:border-slate-700 active:scale-95"
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-800 hover:bg-zinc-100 cursor-pointer touch-instant"
               >
                 <X className="w-4 h-4" />
               </button>
             )}
+          </div>
+        </div>
 
-            {(onVoltarCard || onPularCard) && (
-              <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200/80 dark:border-slate-700 shrink-0">
-                {onVoltarCard && (
-                  <button
-                    type="button"
-                    onClick={onVoltarCard}
-                    disabled={!canVoltar}
-                    title={!canVoltar ? "Primeiro flashcard" : "Voltar (←)"}
-                    className={`p-1 rounded flex items-center transition-all ${
-                      !canVoltar
-                        ? 'opacity-30 cursor-not-allowed text-slate-400'
-                        : 'text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-700 active:scale-95 cursor-pointer shadow-3xs'
-                    }`}
-                  >
-                    <ChevronLeft className="w-3.5 h-3.5" />
-                  </button>
-                )}
-                <div className="h-3 w-px bg-slate-300 dark:bg-slate-700 mx-0.5" />
-                {onPularCard && (
-                  <button
-                    type="button"
-                    onClick={onPularCard}
-                    title="Próximo (→)"
-                    className="p-1 rounded flex items-center text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-700 active:scale-95 cursor-pointer transition-all shadow-3xs"
-                  >
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-            )}
-
-            {progressoTexto && (
-              <span className="text-[10px] font-black px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 whitespace-nowrap shrink-0">
-                {progressoTexto}
+        {/* Corpo do Card */}
+        <div className="bg-white rounded-2xl sm:rounded-3xl border border-zinc-200/80 p-3.5 sm:p-6 flex-1 flex flex-col justify-between space-y-4">
+          <div className="space-y-3">
+            <div className="pb-2.5 border-b border-zinc-100 flex items-center justify-between gap-2">
+              <h3 className="text-[15px] sm:text-[17px] font-semibold text-zinc-900 leading-snug">
+                {tituloContexto || card?.titulo || dadosNormalizados.titulo}
+              </h3>
+              <span className="text-[10.5px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 shrink-0">
+                Fluxograma
               </span>
+            </div>
+
+            {conteudoFluxograma}
+
+            {todosRevelados && (perolaClinica || card?.perolaClinica) && (
+              <div className="p-3.5 rounded-xl bg-amber-50/75 border border-amber-200/80 flex items-start gap-2.5 animate-card-reveal">
+                <span className="text-amber-600 text-sm shrink-0 mt-0.5">💡</span>
+                <div className="text-[13px] sm:text-[13.5px] text-zinc-800 leading-[1.6]">
+                  <span className="font-bold text-amber-900 uppercase tracking-wider text-[10.5px] mr-1.5">
+                    Ponto-Chave:
+                  </span>
+                  <FormattedClinicalText text={perolaClinica || card?.perolaClinica || ''} />
+                </div>
+              </div>
             )}
           </div>
 
-          {/* Centro: Título da Afecção Médica (visível em telas sm+, oculto no mobile estreito para não truncar como 'Es...') */}
-          <div className="hidden sm:block flex-1 min-w-0 px-2 text-center">
-            <h4 
-              title={tituloContexto || fluxograma.titulo || 'Árvore de Decisão'}
-              className="text-xs sm:text-sm font-bold truncate leading-tight text-slate-800 dark:text-slate-100"
-            >
-              {tituloContexto || fluxograma.titulo || 'Árvore de Decisão'}
-            </h4>
-          </div>
-
-          {/* Lado Direito: Ações Principais Essenciais */}
-          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-            {/* Status de nós revelados (discreto) */}
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hidden sm:inline-block">
-              {nosReveladosCount}/{totalNos}
-            </span>
-
-            {/* Alternância Rápida: Canvas vs Trilha */}
-            <button
-              type="button"
-              onClick={() => setModoExibicao(prev => prev === 'canvas' ? 'lista' : 'canvas')}
-              title={modoExibicao === 'canvas' ? "Alternar para Modo Trilha (cascata ramificada com scroll vertical)" : "Alternar para Modo Canvas 2D"}
-              className={`flex items-center gap-1 px-2.5 py-1 sm:py-1.5 rounded-lg font-bold text-[11px] cursor-pointer active:scale-95 transition-all shrink-0 ${
-                modoExibicao === 'lista'
-                  ? 'bg-emerald-600 text-white shadow-xs ring-1 ring-emerald-400'
-                  : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700'
-              }`}
-            >
-              {modoExibicao === 'canvas' ? (
-                <>
-                  <ListTree className="w-3.5 h-3.5 text-emerald-500" />
-                  <span>Trilha</span>
-                </>
-              ) : (
-                <>
-                  <GitFork className="w-3.5 h-3.5 text-blue-400" />
-                  <span>Canvas</span>
-                </>
-              )}
-            </button>
-
-            {/* No Desktop: Controles Expandidos */}
-            <div className="hidden sm:flex items-center gap-1 shrink-0">
-              {!todosCompletos && (
-                <button
-                  type="button"
-                  onClick={handleRevelarProximoPasso}
-                  title="Revelar próximo passo"
-                  className="flex items-center gap-1 px-2.5 py-1 sm:py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10.5px] cursor-pointer active:scale-95 transition-all shadow-xs"
-                >
-                  <Sparkles className="w-3 h-3 text-amber-300" />
-                  <span>Próximo</span>
-                </button>
-              )}
-
-              {modoExibicao === 'canvas' && (
-                <button
-                  type="button"
-                  onClick={centralizarNoOrigem}
-                  title="Focar no Bloco Originário"
-                  className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-blue-600 dark:text-blue-300 border border-slate-200 dark:border-slate-700 cursor-pointer"
-                >
-                  <Target className="w-3.5 h-3.5" />
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={handleToggleExibirDicas}
-                title={exibirDicas ? "Dicas ativadas" : "Dicas ocultas"}
-                className={`p-1.5 rounded-lg border cursor-pointer transition-all ${
-                  exibirDicas
-                    ? 'bg-amber-50 text-amber-700 border-amber-300'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-300 dark:border-slate-700 line-through'
-                }`}
-              >
-                <Lightbulb className={`w-3.5 h-3.5 ${exibirDicas ? 'text-amber-500 fill-amber-400' : ''}`} />
-              </button>
-
-              {onEditarCard && card && (
-                <button
-                  type="button"
-                  onClick={() => onEditarCard(card)}
-                  title="Editar este flashcard"
-                  className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 cursor-pointer"
-                >
-                  <FilePenLine className="w-3.5 h-3.5" />
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={ciclarTema}
-                title={`Tema: ${themeId}`}
-                className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 cursor-pointer"
-              >
-                {themeId === 'light' ? <Sun className="w-3.5 h-3.5 text-amber-500" /> :
-                 themeId === 'dark' ? <Moon className="w-3.5 h-3.5 text-indigo-400" /> :
-                 <Compass className="w-3.5 h-3.5 text-sky-400" />}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setIsFullScreen(prev => !prev)}
-                title={isFullScreen ? "Restaurar" : "Tela Cheia"}
-                className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 cursor-pointer"
-              >
-                {isFullScreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-              </button>
-            </div>
-
-            {/* No Mobile: Botão de Dica Rápida + Menu Dropdown com Todas as Ações Secundárias */}
-            <div className="flex sm:hidden items-center gap-1 relative">
-              <button
-                type="button"
-                onClick={handleToggleExibirDicas}
-                title={exibirDicas ? "Dicas ativadas" : "Dicas ocultas"}
-                className={`p-1.5 rounded-lg border cursor-pointer active:scale-95 ${
-                  exibirDicas
-                    ? 'bg-amber-100 text-amber-900 border-amber-300 shadow-3xs'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-300 dark:border-slate-700'
-                }`}
-              >
-                <Lightbulb className={`w-3.5 h-3.5 ${exibirDicas ? 'text-amber-600 fill-amber-400' : ''}`} />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setMenuMaisAcoesAberto(prev => !prev)}
-                className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 active:scale-95 cursor-pointer"
-                title="Mais opções"
-              >
-                <MoreVertical className="w-3.5 h-3.5" />
-              </button>
-
-              {/* Dropdown de Mais Ações no Mobile */}
-              {menuMaisAcoesAberto && (
-                <div className="absolute right-0 top-full mt-1.5 w-44 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl py-1 z-50 text-xs space-y-0.5 animate-in fade-in zoom-in-95">
-                  {!todosCompletos ? (
-                    <button
-                      type="button"
-                      onClick={() => { handleRevelarTodos(); setMenuMaisAcoesAberto(false); }}
-                      className="w-full px-3 py-1.5 text-left flex items-center gap-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 font-medium"
-                    >
-                      <Eye className="w-3.5 h-3.5 text-blue-500" />
-                      <span>Revelar Tudo</span>
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => { handleReiniciarDesafio(); setMenuMaisAcoesAberto(false); }}
-                      className="w-full px-3 py-1.5 text-left flex items-center gap-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 font-medium"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5 text-amber-500" />
-                      <span>Reiniciar Desafio</span>
-                    </button>
-                  )}
-
-                  {modoExibicao === 'canvas' && (
-                    <button
-                      type="button"
-                      onClick={() => { centralizarNoOrigem(); setMenuMaisAcoesAberto(false); }}
-                      className="w-full px-3 py-1.5 text-left flex items-center gap-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 font-medium"
-                    >
-                      <Target className="w-3.5 h-3.5 text-emerald-500" />
-                      <span>Centralizar Início</span>
-                    </button>
-                  )}
-
-                  {onEditarCard && card && (
-                    <button
-                      type="button"
-                      onClick={() => { onEditarCard(card); setMenuMaisAcoesAberto(false); }}
-                      className="w-full px-3 py-1.5 text-left flex items-center gap-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 font-medium"
-                    >
-                      <FilePenLine className="w-3.5 h-3.5 text-indigo-500" />
-                      <span>Editar Flashcard</span>
-                    </button>
-                  )}
-
+          {/* Rodapé de Ação / Avaliação SRS */}
+          {onAvaliarRevisao && (
+            <div className="sticky bottom-0 z-20 -mx-3.5 sm:-mx-6 px-3.5 sm:px-6 pt-3 pb-3 bg-white/95 border-t border-zinc-100 backdrop-blur-md">
+              {!todosRevelados ? (
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => { ciclarTema(); setMenuMaisAcoesAberto(false); }}
-                    className="w-full px-3 py-1.5 text-left flex items-center gap-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 font-medium"
+                    onClick={revelarProximoNo}
+                    className="flex-1 py-3.5 px-4 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-[13px] sm:text-sm font-semibold cursor-pointer flex items-center justify-center gap-2 min-h-[48px] touch-instant"
                   >
-                    <Compass className="w-3.5 h-3.5 text-sky-500" />
-                    <span>Mudar Tema ({themeId})</span>
+                    <Eye className="w-4 h-4" />
+                    <span>
+                      Revelar Próxima Etapa ({totalRevelados + 1}/{totalOcultaveis})
+                    </span>
                   </button>
-
                   <button
                     type="button"
-                    onClick={() => { setIsFullScreen(prev => !prev); setMenuMaisAcoesAberto(false); }}
-                    className="w-full px-3 py-1.5 text-left flex items-center gap-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 font-medium"
+                    onClick={revelarTudo}
+                    className="px-3.5 py-3.5 rounded-xl border border-zinc-200 bg-zinc-50 hover:bg-zinc-100 text-zinc-700 text-xs font-semibold cursor-pointer min-h-[48px] shrink-0 touch-instant"
                   >
-                    {isFullScreen ? <Minimize2 className="w-3.5 h-3.5 text-amber-500" /> : <Maximize2 className="w-3.5 h-3.5 text-amber-500" />}
-                    <span>{isFullScreen ? 'Sair de Tela Cheia' : 'Tela Cheia'}</span>
+                    Ver Completo
                   </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* =================================================================== */}
-      {/* CENÁRIO & DÚVIDA CLÍNICA (COMPACTO E ULTRA-DISCRETO)                */}
-      {/* =================================================================== */}
-      {textoPerguntaFormatado && (
-        <div className={`px-3 py-2 rounded-xl border text-[11px] sm:text-xs font-semibold flex items-center justify-between gap-2 shrink-0 transition-all ${
-          currentTheme.id === 'light'
-            ? 'bg-emerald-50/90 border-emerald-200/90 text-slate-800 shadow-3xs'
-            : currentTheme.id === 'blueprint'
-            ? 'bg-sky-950/80 border-sky-800 text-sky-100 shadow-md'
-            : 'bg-slate-900/90 border-slate-700 text-slate-100 shadow-md'
-        }`}>
-          <div className="flex items-start sm:items-center gap-2 min-w-0 flex-1">
-            <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded shrink-0 flex items-center gap-1 mt-0.5 sm:mt-0 ${
-              currentTheme.id === 'light'
-                ? 'bg-emerald-200/90 text-emerald-950'
-                : 'bg-emerald-900/70 text-emerald-300'
-            }`}>
-              <Stethoscope className="w-3 h-3" />
-              <span>Desafio</span>
-            </span>
-            <span className={`leading-snug break-words ${bannerPerguntaRecolhido ? "truncate" : ""}`}>
-              {textoPerguntaFormatado}
-            </span>
-          </div>
-
-          {textoPerguntaFormatado.length > 70 && (
-            <button
-              type="button"
-              onClick={() => setBannerPerguntaRecolhido(prev => !prev)}
-              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 shrink-0 cursor-pointer"
-            >
-              {bannerPerguntaRecolhido ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />}
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* TRILHA DECISÓRIA ATIVA (SOMENTE NO CANVAS - EVITA POLUIÇÃO NO MODO TRILHA) */}
-      {modoExibicao === 'canvas' && trilhaDecisao.length > 0 && (
-        <div className={`px-3 py-1 rounded-xl border text-[10.5px] flex items-center gap-1.5 overflow-x-auto whitespace-nowrap shadow-3xs shrink-0 ${
-          currentTheme.id === 'dark'
-            ? 'bg-slate-900/90 border-slate-800 text-slate-300'
-            : currentTheme.id === 'blueprint'
-            ? 'bg-sky-950/90 border-sky-900 text-sky-200'
-            : 'bg-white/95 border-slate-200 text-slate-700 shadow-2xs'
-        }`}>
-          <span className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1 shrink-0">
-            <Sparkles className="w-3 h-3 text-emerald-500" />
-            <span>Trilha:</span>
-          </span>
-
-          <div className="flex items-center gap-1 min-w-0 flex-1 overflow-x-auto">
-            {trilhaDecisao.map((step, idx) => {
-              const ehUltimo = idx === trilhaDecisao.length - 1;
-              return (
-                <React.Fragment key={step.no.id}>
-                  {step.ramoEntrada && (
-                    <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-600 border border-emerald-500/30 shrink-0">
-                      {step.ramoEntrada.rotulo} →
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setNoSelecionadoDetalheId(step.no.id);
-                      if (!nosRevelados[step.no.id]) handleRevelarNo(step.no.id);
-                    }}
-                    className={`px-2 py-0.5 rounded-lg font-bold text-[10px] transition-all cursor-pointer truncate max-w-[150px] shrink-0 ${
-                      ehUltimo
-                        ? 'bg-emerald-600 text-white shadow-2xs font-black ring-1 ring-emerald-400'
-                        : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300'
-                    }`}
-                  >
-                    {step.no.titulo || `Etapa #${idx + 1}`}
-                  </button>
-                </React.Fragment>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* =================================================================== */}
-      {/* VISUALIZAÇÃO CONDICIONAL: MODO TRILHA RAMIFICADA OU CANVAS 2D       */}
-      {/* =================================================================== */}
-      {modoExibicao === 'lista' ? (
-        <div 
-          ref={trilhaScrollRef}
-          className={`flex-1 w-full min-h-0 overflow-y-auto px-2 sm:px-4 pt-2.5 sm:pt-3.5 pb-36 space-y-3 sm:space-y-4 select-text ${
-            currentTheme.id === 'light'
-              ? 'bg-slate-100/90 text-slate-900'
-              : currentTheme.id === 'blueprint'
-              ? 'bg-sky-950/40 text-sky-100'
-              : 'bg-slate-900/60 text-slate-100'
-          }`}
-          style={{
-            WebkitOverflowScrolling: 'touch',
-            touchAction: 'pan-y',
-          }}
-        >
-          {/* Helper de Renderização de Card Clínico para a Trilha (Design de Mapa Mental Compacto) */}
-          {(() => {
-            const renderCardTrilha = (
-              no: NoFluxogramaComplexo,
-              ramoEntrada?: RamoFluxogramaComplexo,
-              isInicial: boolean = false,
-              numeroPasso?: number
-            ) => {
-              const isRevelado = !!nosRevelados[no.id];
-              const isSelecionado = no.id === noSelecionadoDetalheId;
-              const corRamo = ramoEntrada?.cor ? (CORES_RAMO.find(c => c.id === ramoEntrada.cor)?.hex || '#10b981') : '#10b981';
-
-              return (
-                <div key={no.id} className="w-full flex flex-col items-center" style={{ touchAction: 'pan-y' }}>
-                  {/* Seta e Rótulo da Condição que chega neste nó (compacto e elegante) */}
-                  {ramoEntrada && (
-                    <div className="flex flex-col items-center my-0.5 sm:my-1 w-full max-w-md pointer-events-none">
-                      <div className="w-0.5 h-2 sm:h-2.5" style={{ backgroundColor: corRamo }} />
-                      <div 
-                        className="px-2.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold shadow-2xs border text-center max-w-[95%] break-words leading-tight"
-                        style={{
-                          backgroundColor: currentTheme.arrowPillFill,
-                          borderColor: corRamo,
-                          color: currentTheme.arrowPillTextFill,
-                        }}
-                      >
-                        ↓ {ramoEntrada.rotulo}
-                      </div>
-                      <div className="w-0.5 h-2 sm:h-2.5" style={{ backgroundColor: corRamo }} />
-                    </div>
-                  )}
-
-                  {/* Cartão Clínico Interativo com touch-pan-y explícito */}
-                  <div
-                    onClick={() => {
-                      if (!isRevelado) {
-                        handleRevelarNo(no.id);
-                      } else {
-                        setNoSelecionadoDetalheId(no.id);
-                        setMostrarGavetaDetalhes(true);
-                      }
-                    }}
-                    style={{ touchAction: 'pan-y' }}
-                    className={`w-full max-w-lg mx-auto ${
-                      densidadeTrilha === 'compacto' ? 'p-2.5 sm:p-3.5' : 'p-3.5 sm:p-4'
-                    } rounded-xl sm:rounded-2xl border sm:border-2 transition-colors cursor-pointer shadow-xs ${
-                      !isRevelado
-                        ? `${currentTheme.hiddenCardBgClass} border-dashed ${currentTheme.hiddenCardBorderClass} shadow-md`
-                        : `${currentTheme.cardBgClass} ${
-                            isSelecionado
-                              ? 'border-emerald-500 ring-2 ring-emerald-500/30 shadow-lg'
-                              : isInicial
-                              ? 'border-amber-400 ring-1 ring-amber-400/30 shadow-md'
-                              : `${currentTheme.cardBorderClass} shadow-xs hover:border-slate-400`
-                          }`
-                    }`}
-                  >
-                    <div className="flex items-center justify-between pb-1 sm:pb-1.5 border-b border-slate-200 dark:border-slate-800">
-                      <div className="flex items-center gap-1.5">
-                        <span className={`text-[8.5px] sm:text-[9.5px] font-black uppercase px-2 py-0.5 rounded-md ${
-                          isInicial
-                            ? 'bg-amber-400 text-slate-950 font-black'
-                            : currentTheme.id === 'light'
-                              ? no.tipo === 'inicio' ? 'bg-blue-100 text-blue-900 border border-blue-200' :
-                                no.tipo === 'alerta' ? 'bg-rose-100 text-rose-900 border border-rose-200' :
-                                no.tipo === 'decisao' ? 'bg-amber-100 text-amber-900 border border-amber-200' :
-                                no.tipo === 'diagnostico' ? 'bg-purple-100 text-purple-900 border border-purple-200' :
-                                'bg-emerald-100 text-emerald-900 border border-emerald-200'
-                              : no.tipo === 'inicio' ? 'bg-blue-900/80 text-blue-300' :
-                                no.tipo === 'alerta' ? 'bg-rose-900/80 text-rose-300' :
-                                no.tipo === 'decisao' ? 'bg-amber-900/80 text-amber-300' :
-                                no.tipo === 'diagnostico' ? 'bg-purple-900/80 text-purple-300' :
-                                'bg-emerald-900/80 text-emerald-300'
-                        }`}>
-                          {isInicial ? '★ Bloco Originário' : (numeroPasso ? `Passo ${numeroPasso} • ${no.tipo}` : no.tipo)}
-                        </span>
-                      </div>
-
-                      {!isRevelado ? (
-                        <span className={`flex items-center gap-1 text-[8.5px] sm:text-[9.5px] font-bold px-2 py-0.5 rounded-full border animate-pulse ${
-                          currentTheme.id === 'light'
-                            ? 'text-blue-700 bg-blue-50 border-blue-200'
-                            : 'text-amber-500 bg-amber-500/10 border-amber-500/30'
-                        }`}>
-                          <HelpCircle className="w-3 h-3" />
-                          Ocluso
-                        </span>
-                      ) : (
-                        <span className="text-[8.5px] sm:text-[9.5px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3" /> Revelado
-                        </span>
-                      )}
-                    </div>
-
-                    {!isRevelado ? (
-                      <div className="pt-2 text-center space-y-1.5">
-                        <p className={`text-xs font-bold ${currentTheme.hiddenCardTitleClass}`}>
-                          {exibirDicas && no.dica ? `Dica: ${no.dica}` : 'Qual a conduta ou evento neste ponto?'}
-                        </p>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRevelarNo(no.id);
-                          }}
-                          className={`px-3 py-1.5 rounded-lg ${currentTheme.hiddenCardButtonClass} font-black text-xs shadow-sm cursor-pointer active:scale-95 transition-all`}
-                        >
-                          Toque para Revelar
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="pt-1.5 sm:pt-2 space-y-1 sm:space-y-1.5 text-left">
-                        <h5 className={`text-xs sm:text-[13px] font-bold leading-snug break-words ${currentTheme.cardTitleClass}`}>
-                          {no.titulo || '(Etapa sem título)'}
-                        </h5>
-                        {no.descricao && (
-                          <div className={`text-[10px] sm:text-xs leading-snug sm:leading-relaxed break-words ${currentTheme.cardDescClass}`}>
-                            <FormattedClinicalText text={no.descricao} />
-                          </div>
-                        )}
-                        {no.ramos.length > 0 && (
-                          <div className="pt-1 sm:pt-1.5 flex items-center gap-1 sm:gap-1.5 flex-wrap border-t border-slate-200/60 dark:border-slate-800/60 text-[9px] sm:text-[9.5px]">
-                            <span className="opacity-70 font-semibold flex items-center gap-0.5">
-                              {no.ramos.length > 1 && <GitFork className="w-2.5 h-2.5 text-emerald-500" />}
-                              Desdobramentos:
-                            </span>
-                            {no.ramos.map(r => (
-                              <span 
-                                key={r.id} 
-                                className="px-2 py-0.5 rounded-md font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700 max-w-full break-words leading-tight"
-                                title={r.rotulo}
-                              >
-                                ➔ {r.rotulo}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            };
-
-            const troncoComum = arvoreTrilha.troncoComum;
-            const temRamificacoes = arvoreTrilha.caminhos.length > 1;
-            const caminhosFiltrados = filtroRamoId === 'todos'
-              ? arvoreTrilha.caminhos
-              : arvoreTrilha.caminhos.filter(c => c.id === filtroRamoId);
-
-            return (
-              <div className="w-full flex flex-col items-center space-y-3 sm:space-y-4">
-                {/* 1. Tronco Comum Sequencial (do Bloco Originário até o ponto de bifurcação ou desfecho completo) */}
-                {troncoComum.map((passo, pIdx) => (
-                  <React.Fragment key={passo.no.id}>
-                    {renderCardTrilha(
-                      passo.no, 
-                      passo.ramoEntrada, 
-                      pIdx === 0, 
-                      pIdx === 0 ? undefined : passo.numeroPasso
-                    )}
-                  </React.Fragment>
-                ))}
-
-                {/* 2. Divisor de Ramificações / Seletor de Caminhos Elegante */}
-                {temRamificacoes && (
-                  <div className="w-full flex flex-col items-center my-2 sm:my-3 space-y-2">
-                    {/* Indicador de Bifurcação */}
-                    <div className="flex flex-col items-center pointer-events-none">
-                      <div className="w-0.5 h-2.5 sm:h-3.5 bg-emerald-500/60" />
-                      <div className="flex items-center gap-1.5 px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full bg-emerald-100/90 dark:bg-emerald-950/90 border border-emerald-300 dark:border-emerald-700 text-[10px] sm:text-[10.5px] font-bold text-emerald-900 dark:text-emerald-300 shadow-2xs">
-                        <GitFork className="w-3 h-3 sm:w-3.5 sm:h-3.5 rotate-180 text-emerald-600 dark:text-emerald-400" />
-                        <span>Bifurcação Clínica: {arvoreTrilha.caminhos.length} caminhos</span>
-                      </div>
-                      <div className="w-0.5 h-2.5 sm:h-3.5 bg-emerald-500/60" />
-                    </div>
-
-                    {/* Barra de Filtro de Ramos: 1 linha limpa com rolagem horizontal suave no celular */}
-                    <div className="w-full max-w-2xl px-1 overflow-x-auto no-scrollbar flex items-center justify-start sm:justify-center gap-1.5 touch-pan-x py-0.5">
-                      <button
-                        type="button"
-                        onClick={() => setFiltroRamoId('todos')}
-                        className={`px-2.5 py-1 rounded-xl text-[11px] sm:text-xs font-bold shrink-0 transition-all cursor-pointer flex items-center gap-1.5 border ${
-                          filtroRamoId === 'todos'
-                            ? 'bg-slate-900 text-white shadow-sm ring-2 ring-emerald-500/60 dark:bg-emerald-600 border-transparent'
-                            : currentTheme.id === 'light'
-                            ? 'bg-white text-slate-800 border-slate-200 hover:bg-slate-50 shadow-3xs'
-                            : 'bg-slate-800/90 text-slate-300 border-slate-700 hover:bg-slate-700'
-                        }`}
-                      >
-                        <GitFork className="w-3 h-3" />
-                        <span>Todos os Ramos ({arvoreTrilha.caminhos.length})</span>
-                      </button>
-
-                      {arvoreTrilha.caminhos.map((c, idx) => {
-                        const estilo = obterEstiloRamo(idx);
-                        const isAtivo = filtroRamoId === c.id;
-                        return (
-                          <button
-                            key={c.id}
-                            type="button"
-                            onClick={() => setFiltroRamoId(c.id)}
-                            className={`px-2.5 py-1 rounded-xl text-[11px] sm:text-xs font-bold shrink-0 transition-all cursor-pointer flex items-center gap-1.5 border ${
-                              isAtivo
-                                ? `${estilo.pillAtivo}`
-                                : currentTheme.id === 'light'
-                                ? 'bg-white text-slate-800 border-slate-200 hover:bg-slate-50 shadow-3xs'
-                                : `bg-slate-800/90 ${estilo.pillInativo}`
-                            }`}
-                          >
-                            <span className={`w-1.5 h-1.5 rounded-full ${estilo.dot}`} />
-                            <span className="whitespace-nowrap">Ramo {idx + 1}: {c.rotulo}</span>
-                          </button>
-                        );
-                      })}
-
-                      {/* Alternador de Densidade para Ajuste Rápido de Zoom Mental */}
-                      <button
-                        type="button"
-                        onClick={() => setDensidadeTrilha(prev => prev === 'compacto' ? 'expandido' : 'compacto')}
-                        className="px-2 py-1 rounded-xl text-[10px] font-bold border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-800/90 text-slate-600 dark:text-slate-300 hover:bg-slate-100 shrink-0 cursor-pointer flex items-center gap-1 shadow-3xs ml-auto"
-                        title="Alternar densidade de visualização dos cards"
-                      >
-                        <span>{densidadeTrilha === 'compacto' ? '🗜️ Compacto' : '📄 Expandido'}</span>
-                      </button>
-                    </div>
-
-                    {/* Dica de usabilidade para mobile quando estiver exibindo todos os ramos */}
-                    {filtroRamoId === 'todos' && (
-                      <div className="flex sm:hidden items-center justify-center gap-1 text-[9.5px] font-medium text-slate-400 dark:text-slate-500 pt-0.5">
-                        <span>⇄ Deslize horizontalmente para comparar os ramos</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* 3. Renderização dos Caminhos / Ramificações Embelezadas */}
-                {temRamificacoes && filtroRamoId === 'todos' ? (
-                  /* Mobile: Carrossel Horizontal Snap (estilo mapa mental lado a lado) | Desktop: Colunas Paralelas Grid */
-                  <div className={`w-full flex sm:grid sm:grid-cols-2 ${arvoreTrilha.caminhos.length > 2 ? 'lg:grid-cols-3' : ''} overflow-x-auto sm:overflow-visible snap-x snap-mandatory gap-2.5 sm:gap-6 pb-2 touch-pan-x no-scrollbar items-start`}>
-                    {caminhosFiltrados.map((caminho, cIdx) => {
-                      const estilo = obterEstiloRamo(cIdx);
-                      return (
-                        <div 
-                          key={caminho.id} 
-                          className={`flex flex-col items-center w-[85vw] max-w-[340px] sm:w-full shrink-0 snap-center space-y-2 sm:space-y-3 p-2.5 sm:p-3.5 rounded-2xl border ${estilo.headerBorder} ${
-                            currentTheme.id === 'light'
-                              ? 'bg-white/90 border-slate-200 shadow-sm'
-                              : 'bg-slate-800/60 shadow-xs'
-                          } backdrop-blur-xs`}
-                        >
-                          {/* Cabeçalho Embelezado do Ramo */}
-                          <div className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl border ${estilo.headerBorder} ${estilo.headerBg} shadow-3xs`}>
-                            <div className="flex items-start sm:items-center gap-1.5 min-w-0 flex-1">
-                              <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider shrink-0 ${estilo.badge}`}>
-                                Ramo {cIdx + 1}
-                              </span>
-                              <h6 className={`text-[11px] sm:text-[13px] font-bold leading-snug break-words ${currentTheme.id === 'light' ? 'text-slate-900' : 'text-slate-100'}`} title={caminho.rotulo}>
-                                {caminho.rotulo}
-                              </h6>
-                            </div>
-                            <span className="text-[9.5px] font-semibold text-slate-500 dark:text-slate-400 shrink-0 ml-1">
-                              {caminho.passos.length} {caminho.passos.length === 1 ? 'passo' : 'passos'}
-                            </span>
-                          </div>
-
-                          {/* Passos Clínicos do Ramo (sem repetição de rótulo no primeiro passo se idêntico ao cabeçalho) */}
-                          {caminho.passos.map((p, pIdx) => (
-                            <React.Fragment key={p.no.id}>
-                              {renderCardTrilha(
-                                p.no, 
-                                pIdx === 0 && p.ramoEntrada?.rotulo === caminho.rotulo ? undefined : p.ramoEntrada, 
-                                false, 
-                                p.numeroPasso || (pIdx + troncoComum.length + 1)
-                              )}
-                            </React.Fragment>
-                          ))}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : temRamificacoes ? (
-                  /* Modo Foco em 1 Único Caminho Selecionado */
-                  <div className="w-full max-w-lg space-y-2.5 sm:space-y-3">
-                    {(() => {
-                      const caminhoAtivo = caminhosFiltrados[0];
-                      const cIdx = arvoreTrilha.caminhos.findIndex(c => c.id === caminhoAtivo?.id);
-                      const estilo = obterEstiloRamo(cIdx >= 0 ? cIdx : 0);
-                      return (
-                        <>
-                          <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 p-2 rounded-xl border ${estilo.headerBorder} ${estilo.headerBg} text-xs shadow-2xs`}>
-                            <div className="flex items-start sm:items-center gap-1.5 min-w-0 flex-1">
-                              <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider shrink-0 ${estilo.badge}`}>
-                                Ramo {cIdx + 1}
-                              </span>
-                              <span className={`font-bold leading-snug break-words ${currentTheme.id === 'light' ? 'text-slate-900' : 'text-slate-100'}`} title={caminhoAtivo?.rotulo}>
-                                {caminhoAtivo?.rotulo}
-                              </span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => setFiltroRamoId('todos')}
-                              className="text-[10px] sm:text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline shrink-0 cursor-pointer self-end sm:self-center ml-2"
-                            >
-                              Ver todos os ramos
-                            </button>
-                          </div>
-
-                          {caminhoAtivo?.passos.map((p, pIdx) => (
-                            <React.Fragment key={p.no.id}>
-                              {renderCardTrilha(
-                                p.no, 
-                                pIdx === 0 && p.ramoEntrada?.rotulo === caminhoAtivo.rotulo ? undefined : p.ramoEntrada, 
-                                false, 
-                                p.numeroPasso || (pIdx + troncoComum.length + 1)
-                              )}
-                            </React.Fragment>
-                          ))}
-                        </>
-                      );
-                    })()}
-                  </div>
-                ) : null}
-
-                {/* 4. Nós Avulsos / Desfechos Desconectados se houver */}
-                {arvoreTrilha.avulsos.length > 0 && (
-                  <div className="w-full max-w-lg space-y-2.5 sm:space-y-3 pt-3 sm:pt-4 border-t border-slate-200 dark:border-slate-800">
-                    <span className="text-center block text-[9.5px] sm:text-[10px] font-bold uppercase text-slate-400">
-                      Outros Desfechos do Fluxograma
-                    </span>
-                    {arvoreTrilha.avulsos.map((no, idx) => renderCardTrilha(no, undefined, false, idx + 10))}
-                  </div>
-                )}
-              </div>
-            );
-          })()}
-        </div>
-      ) : (
-        /* CANVAS GRÁFICO INTERATIVO DE RESOLUÇÃO (ULTRASSUAVE A 60/120 FPS) */
-        <div 
-          ref={canvasRef}
-          onPointerDown={handleCanvasPointerDown}
-          onPointerMove={handleCanvasPointerMove}
-          onPointerUp={handleCanvasPointerUp}
-          onPointerCancel={handleCanvasPointerUp}
-        className={`relative w-full rounded-xl sm:rounded-2xl overflow-hidden border shadow-inner select-none cursor-grab active:cursor-grabbing transition-all ${
-          currentTheme.canvasBorderClass
-        } ${
-          isFullScreen ? 'flex-1 h-full w-full min-h-0' : 'h-[520px] sm:h-[620px]'
-        }`}
-        style={{
-          backgroundImage: `radial-gradient(${currentTheme.gridDotColor} 1.15px, transparent 1.15px)`,
-          backgroundSize: currentTheme.gridSize,
-          backgroundColor: currentTheme.canvasBg,
-          touchAction: 'none',
-          overscrollBehavior: 'contain',
-        }}
-      >
-
-        {/* Camada Móvel e Transformável com Pan e Zoom Ultrafluidos */}
-        <div
-          ref={contentLayerRef}
-          className="absolute inset-0"
-          style={{
-            transform: `translate3d(${panOffset.x}px, ${panOffset.y}px, 0) scale(${zoom})`,
-            transformOrigin: '0 0',
-            width: '3200px',
-            height: '2600px',
-            willChange: arrastandoCanvas ? 'transform' : 'auto',
-          }}
-        >
-          {/* SVG com as Conexões e Setas Multidirecionais */}
-          <svg 
-            className="absolute inset-0 w-full h-full pointer-events-none"
-            style={{ overflow: 'visible' }}
-          >
-            <defs>
-              {CORES_RAMO.map(c => (
-                <marker
-                  key={c.id}
-                  id={`view-seta-${c.id}`}
-                  viewBox="0 0 10 10"
-                  refX="8"
-                  refY="5"
-                  markerWidth="6"
-                  markerHeight="6"
-                  orient="auto"
-                >
-                  <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill={c.hex} strokeLinecap="round" strokeLinejoin="round" />
-                </marker>
-              ))}
-            </defs>
-
-            {nos.map(origem => {
-              const ox = origem.posicaoX ?? 50;
-              const oy = origem.posicaoY ?? 50;
-              const origemRevelada = !!nosRevelados[origem.id];
-
-              return origem.ramos.map((ramo, ramoIdx) => {
-                const destino = nos.find(n => n.id === ramo.destinoNoId);
-                if (!destino) return null;
-
-                const dx = destino.posicaoX ?? 50;
-                const dy = destino.posicaoY ?? 50;
-
-                // O usuário pediu expressamente:
-                // "o primeiro quadrado sempre revelado e as setas que saem desse quadrado sempre estarem reveladas também"
-                // "é a seta que vai fazer a gente adivinhar qual é o próximo tapa daquele fluxograma"
-                // Logo, a seta que sai de um nó revelado SEMPRE aparece para guiar a dedução clínica!
-                if (!origemRevelada) return null;
-
-                const ramosEntrandoDestino = nos.flatMap(n => n.ramos).filter(r => r.destinoNoId === destino.id);
-                const entradaIdx = ramosEntrandoDestino.findIndex(r => r.id === ramo.id);
-                const totalEntradas = ramosEntrandoDestino.length;
-
-                const conexao = calcularConexaoDinamica(
-                  ox,
-                  oy,
-                  dx,
-                  dy,
-                  260,
-                  160,
-                  ramoIdx,
-                  origem.ramos.length,
-                  entradaIdx >= 0 ? entradaIdx : 0,
-                  totalEntradas
-                );
-                const corObj = CORES_RAMO.find(c => c.id === ramo.cor) || CORES_RAMO[0];
-                const destinoRevelado = !!nosRevelados[destino.id];
-
-                return (
-                  <g key={ramo.id} className="pointer-events-auto">
-                    {/* Linha da Seta com curvatura consistente e pontas arredondadas */}
-                    <path
-                      d={conexao.pathData}
-                      fill="none"
-                      stroke={corObj.hex}
-                      strokeWidth={obterStrokeWidthSeta(ramo.espessura)}
-                      strokeDasharray={destinoRevelado ? obterDashArraySeta(ramo.estilo) : (obterDashArraySeta(ramo.estilo) !== 'none' ? obterDashArraySeta(ramo.estilo) : '5,4')}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      markerEnd={`url(#view-seta-${ramo.cor || 'verde'})`}
-                      className="transition-all"
-                    />
-                  </g>
-                );
-              });
-            })}
-          </svg>
-
-          {/* Camada de Rótulos de Conexão com Quebra de Linha Automática (Multiline / Sem Truncamento) */}
-          {nos.map(origem => {
-            const ox = origem.posicaoX ?? 50;
-            const oy = origem.posicaoY ?? 50;
-            const origemRevelada = !!nosRevelados[origem.id];
-            if (!origemRevelada) return null;
-
-            return origem.ramos.map((ramo, ramoIdx) => {
-              const destino = nos.find(n => n.id === ramo.destinoNoId);
-              if (!destino) return null;
-
-              const dx = destino.posicaoX ?? 50;
-              const dy = destino.posicaoY ?? 50;
-
-              const ramosEntrandoDestino = nos.flatMap(n => n.ramos).filter(r => r.destinoNoId === destino.id);
-              const entradaIdx = ramosEntrandoDestino.findIndex(r => r.id === ramo.id);
-              const totalEntradas = ramosEntrandoDestino.length;
-
-              const conexao = calcularConexaoDinamica(
-                ox,
-                oy,
-                dx,
-                dy,
-                260,
-                160,
-                ramoIdx,
-                origem.ramos.length,
-                entradaIdx >= 0 ? entradaIdx : 0,
-                totalEntradas
-              );
-              const corObj = CORES_RAMO.find(c => c.id === ramo.cor) || CORES_RAMO[0];
-
-              const labelTexto = ramo.rotulo || '';
-              if (!labelTexto.trim()) return null;
-
-              return (
-                <div
-                  key={`rotulo-ramo-${ramo.id}`}
-                  style={{
-                    position: 'absolute',
-                    left: `${conexao.midX}px`,
-                    top: `${conexao.midY}px`,
-                    transform: 'translate(-50%, -50%)',
-                    maxWidth: '195px',
-                    minWidth: '60px',
-                    zIndex: 14,
-                    backgroundColor: currentTheme.arrowPillFill,
-                    borderColor: corObj.hex,
-                    color: currentTheme.arrowPillTextFill,
-                  }}
-                  className="px-2.5 py-1 rounded-xl text-center text-[10.5px] font-bold leading-tight shadow-md border-2 break-words whitespace-normal pointer-events-auto select-none backdrop-blur-xs transition-transform hover:scale-105"
-                  title={labelTexto}
-                >
-                  {labelTexto}
-                </div>
-              );
-            });
-          })}
-
-          {/* Nós / Quadrados no Canvas com Suporte a Treino e Adivinhação */}
-          {nos.map(no => {
-            const isInicial = no.id === noInicialId;
-            const isRevelado = !!nosRevelados[no.id];
-            const isSelecionado = no.id === noSelecionadoDetalheId;
-
-            // Determinar cores da borda de acordo com o tipo
-            const corBorda = 
-              no.tipo === 'inicio' ? 'border-blue-400' :
-              no.tipo === 'alerta' ? 'border-rose-400' :
-              no.tipo === 'decisao' ? 'border-amber-400' :
-              no.tipo === 'diagnostico' ? 'border-purple-400' :
-              'border-emerald-400';
-
-            return (
-              <div
-                key={no.id}
-                data-no-id={no.id}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (!isRevelado) {
-                    handleRevelarNo(no.id);
-                  } else {
-                    setNoSelecionadoDetalheId(no.id);
-                    setMostrarGavetaDetalhes(true);
-                  }
-                }}
-                style={{
-                  left: `${no.posicaoX ?? 50}px`,
-                  top: `${no.posicaoY ?? 50}px`,
-                  width: '260px',
-                  minHeight: '145px',
-                }}
-                className={`absolute p-3.5 rounded-2xl transition-all cursor-pointer select-none ${
-                  !isRevelado
-                    ? `${currentTheme.hiddenCardBgClass} border-2 border-dashed ${currentTheme.hiddenCardBorderClass} shadow-lg active:scale-98`
-                    : `${currentTheme.cardBgClass} border-2 ${
-                        isSelecionado 
-                          ? `${corBorda} ring-4 ring-emerald-500/30 shadow-xl scale-102` 
-                          : isInicial
-                            ? 'border-amber-400 ring-2 ring-amber-400/30 shadow-lg'
-                            : `${currentTheme.cardBorderClass} hover:border-slate-400 ${currentTheme.cardShadowClass}`
-                      }`
-                }`}
-              >
-                {/* Header do Card com Tag de Tipo e Indicador */}
-                <div className={`flex items-center justify-between gap-1 pb-1.5 border-b ${currentTheme.cardDividerClass}`}>
-                  <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
-                    isInicial
-                      ? 'bg-amber-400 text-slate-950 font-black ring-1 ring-amber-300'
-                      : no.tipo === 'inicio' ? 'bg-blue-900/80 text-blue-300' :
-                        no.tipo === 'alerta' ? 'bg-rose-900/80 text-rose-300' :
-                        no.tipo === 'decisao' ? 'bg-amber-900/80 text-amber-300' :
-                        no.tipo === 'diagnostico' ? 'bg-purple-900/80 text-purple-300' :
-                        'bg-emerald-900/80 text-emerald-300'
-                  }`}>
-                    {isInicial ? '★ Bloco Originário' : no.tipo}
-                  </span>
-
-                  {!isRevelado ? (
-                    <span className="flex items-center gap-0.5 text-[9px] font-bold text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded-full border border-amber-500/30 animate-pulse">
-                      <HelpCircle className="w-2.5 h-2.5" />
-                      Adivinhe
-                    </span>
-                  ) : (
-                    <span className="text-[8.5px] text-emerald-500 font-bold flex items-center gap-0.5">
-                      <CheckCircle2 className="w-2.5 h-2.5" /> Revelado
-                    </span>
-                  )}
-                </div>
-
-                {/* Corpo do Card: Modo Ocluso (Adivinhação) vs Modo Revelado */}
-                {!isRevelado ? (
-                  <div className="pt-2.5 pb-1 text-center space-y-1.5">
-                    <div className="w-8 h-8 rounded-full bg-amber-500/20 text-amber-500 border border-amber-500/40 flex items-center justify-center mx-auto">
-                      <HelpCircle className="w-4 h-4" />
-                    </div>
-                    <div className={`text-[11px] font-extrabold ${currentTheme.hiddenCardTitleClass}`}>
-                      {exibirDicas && no.dica ? `Dica: ${no.dica}` : 'Qual a conduta neste ponto?'}
-                    </div>
-                    <p className={`text-[9.5px] ${currentTheme.hiddenCardDescClass}`}>
-                      Observe a seta e toque para conferir a resposta.
-                    </p>
-                    <div className="pt-1">
-                      <span className={`inline-block px-3 py-1 rounded-lg ${currentTheme.hiddenCardButtonClass} font-black text-[10px] shadow-sm transition-all`}>
-                        Toque para Revelar
-                      </span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="pt-2 pb-1 space-y-1.5">
-                    <h5 className={`text-[11.5px] font-bold ${currentTheme.cardTitleClass} line-clamp-2 leading-tight`}>
-                      {no.titulo || '(Etapa sem título)'}
-                    </h5>
-
-                    {no.descricao ? (
-                      <div className={`text-[10px] ${currentTheme.cardDescClass} line-clamp-3 leading-snug`}>
-                        <FormattedClinicalText text={no.descricao} />
-                      </div>
-                    ) : null}
-
-                    {/* Resumo de Saídas do Bloco */}
-                    <div className={`pt-1.5 flex items-center justify-between border-t ${currentTheme.cardDividerClass} text-[9px] ${currentTheme.cardMutedClass}`}>
-                      <span>
-                        {no.ramos.length === 0 
-                          ? 'Desfecho final' 
-                          : `${no.ramos.length} ${no.ramos.length === 1 ? 'caminho' : 'caminhos'} saindo`}
-                      </span>
-                      <span className="text-emerald-500 font-bold">
-                        Toque p/ Detalhes ➔
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-
-          {/* =================================================================== */}
-          {/* DRAWER / PAINEL FLUTUANTE COM CONDUTA DETALHADA E LEITURA CLARA     */}
-          {/* Posicionado estritamente DENTRO do canvas, sem nunca sobrepor a dica*/}
-          {/* =================================================================== */}
-          {noSelecionadoObj && mostrarGavetaDetalhes && (
-            <div className={`absolute bottom-2.5 left-2 right-2 sm:left-4 sm:right-4 max-w-lg mx-auto p-3 rounded-2xl ${currentTheme.drawerBgClass} border ${currentTheme.drawerBorderClass} ${currentTheme.drawerTextClass} shadow-2xl z-30 transition-all backdrop-blur-md animate-in slide-in-from-bottom-2 duration-150`}>
-              <div className={`flex items-center justify-between pb-1.5 border-b ${currentTheme.cardDividerClass}`}>
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
-                    noSelecionadoObj.id === noInicialId
-                      ? 'bg-amber-400 text-slate-950 font-black'
-                      : 'bg-emerald-900/80 text-emerald-300'
-                  }`}>
-                    {noSelecionadoObj.id === noInicialId ? '★ Bloco Originário' : noSelecionadoObj.tipo}
-                  </span>
-                  <h4 className={`text-xs font-bold ${currentTheme.drawerTitleClass} truncate`}>
-                    {noSelecionadoObj.titulo || 'Detalhe do Bloco'}
-                  </h4>
-                </div>
-
-                <div className="flex items-center gap-1 shrink-0">
-                  {!nosRevelados[noSelecionadoObj.id] && (
-                    <button
-                      type="button"
-                      onClick={() => handleRevelarNo(noSelecionadoObj.id)}
-                      className="px-2.5 py-1 rounded-lg bg-amber-500 text-slate-950 font-black text-[10px] cursor-pointer active:scale-95"
-                    >
-                      Revelar
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setMostrarGavetaDetalhes(false)}
-                    title="Minimizar painel"
-                    className={`p-1 ${currentTheme.cardMutedClass} hover:text-white rounded cursor-pointer`}
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Conteúdo Clínico Completo e Legível para Mobile */}
-              {nosRevelados[noSelecionadoObj.id] ? (
-                <div className="mt-2 space-y-1.5 text-xs max-h-36 sm:max-h-44 overflow-y-auto pr-1">
-                  {noSelecionadoObj.descricao ? (
-                    <div className={`p-2 rounded-xl ${themeId === 'light' ? 'bg-slate-50 border border-slate-200 text-slate-800' : 'bg-slate-800/80 border border-slate-700 text-slate-200'} leading-relaxed text-[11px]`}>
-                      <FormattedClinicalText text={noSelecionadoObj.descricao} />
-                    </div>
-                  ) : (
-                    <p className={`text-[11px] ${currentTheme.cardMutedClass} italic`}>
-                      Nenhuma anotação adicional informada para este bloco.
-                    </p>
-                  )}
-
-                  {noSelecionadoObj.ramos.length > 0 && (
-                    <div className="pt-1 flex items-center gap-1.5 flex-wrap">
-                      <span className={`text-[9.5px] font-bold ${currentTheme.cardMutedClass}`}>Próximos passos clínicos:</span>
-                      {noSelecionadoObj.ramos.map(r => (
-                        <span 
-                          key={r.id}
-                          className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${themeId === 'light' ? 'bg-slate-100 border border-slate-200 text-slate-800' : 'bg-slate-800 border border-slate-700 text-slate-200'}`}
-                        >
-                          {r.rotulo}
-                        </span>
-                      ))}
-                    </div>
-                  )}
                 </div>
               ) : (
-                <div className="mt-2 p-2 rounded-xl bg-amber-950/40 border border-amber-800/50 text-amber-200 text-[11px] flex items-center justify-between gap-2">
-                  <span className="text-[10.5px]">Este bloco ainda está ocluso para o seu treino ativo.</span>
+                <div className="grid grid-cols-4 gap-1.5 sm:gap-2 animate-card-reveal">
                   <button
                     type="button"
-                    onClick={() => handleRevelarNo(noSelecionadoObj.id)}
-                    className="px-2 py-1 rounded-lg bg-amber-400 text-slate-950 font-bold text-[10px] shrink-0 cursor-pointer"
+                    onClick={() => onAvaliarRevisao('errei')}
+                    className="flex flex-col items-center justify-center py-2.5 px-1 rounded-xl bg-rose-50/70 hover:bg-rose-100/80 border border-rose-200/85 text-rose-800 font-semibold cursor-pointer min-h-[50px] touch-instant"
                   >
-                    Revelar Agora
+                    <RotateCcw className="w-3.5 h-3.5 text-rose-600 mb-0.5" />
+                    <span className="text-xs font-bold">Errei</span>
+                    <span className="text-[10px] text-rose-600/90 font-medium">
+                      {infoRodada ? formatarTempoMinutos(infoRodada.timers.erreiMinutos) : '2m'}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onAvaliarRevisao('dificil')}
+                    className="flex flex-col items-center justify-center py-2.5 px-1 rounded-xl bg-amber-50/70 hover:bg-amber-100/80 border border-amber-200/85 text-amber-800 font-semibold cursor-pointer min-h-[50px] touch-instant"
+                  >
+                    <AlertCircle className="w-3.5 h-3.5 text-amber-600 mb-0.5" />
+                    <span className="text-xs font-bold">Difícil</span>
+                    <span className="text-[10px] text-amber-700/90 font-medium">
+                      {infoRodada ? formatarTempoMinutos(infoRodada.timers.dificilMinutos) : '5m'}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onAvaliarRevisao('bom')}
+                    className="flex flex-col items-center justify-center py-2.5 px-1 rounded-xl bg-sky-50/85 hover:bg-sky-100/90 border border-sky-200/90 text-sky-900 font-semibold cursor-pointer min-h-[50px] touch-instant"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5 text-sky-600 mb-0.5" />
+                    <span className="text-xs font-bold">Bom</span>
+                    <span className="text-[10px] text-sky-700/90 font-medium">
+                      {infoRodada ? formatarTempoMinutos(infoRodada.timers.bomMinutos) : '15m'}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onAvaliarRevisao('facil')}
+                    className="flex flex-col items-center justify-center py-2.5 px-1 rounded-xl bg-emerald-50/75 hover:bg-emerald-100/85 border border-emerald-200/85 text-emerald-800 font-semibold cursor-pointer min-h-[50px] touch-instant"
+                  >
+                    <Zap className="w-3.5 h-3.5 text-emerald-600 mb-0.5" />
+                    <span className="text-xs font-bold">Fácil</span>
+                    <span className="text-[10px] text-emerald-700/90 font-medium">
+                      {infoRodada ? formatarTempoMinutos(infoRodada.timers.facilMinutos) : '30m'}
+                    </span>
                   </button>
                 </div>
               )}
             </div>
           )}
-
-          {/* Botão flutuante para reabrir detalhes se foram minimizados */}
-          {!mostrarGavetaDetalhes && noSelecionadoObj && (
-            <button
-              type="button"
-              onClick={() => setMostrarGavetaDetalhes(true)}
-              className="absolute bottom-2.5 left-2.5 z-20 px-2.5 py-1 rounded-full bg-slate-900/90 hover:bg-slate-800 text-white text-[10.5px] font-bold flex items-center gap-1.5 shadow-lg border border-slate-700/80 backdrop-blur-md cursor-pointer active:scale-95 transition-transform"
-            >
-              <Info className="w-3.5 h-3.5 text-blue-400" />
-              <span className="truncate max-w-[160px] sm:max-w-[220px]">Detalhes: {noSelecionadoObj.titulo}</span>
-            </button>
-          )}
         </div>
-
-        {/* Indicador Flutuante Discreto de Nível de Zoom (exibido durante o movimento de pinça ou scroll) */}
-        {indicadorZoomVisivel && (
-          <div className="absolute top-3 right-3 z-30 pointer-events-none transition-opacity duration-300">
-            <div className={`px-2.5 py-1 rounded-full text-[11px] font-mono font-bold shadow-lg backdrop-blur-md border flex items-center gap-1.5 ${
-              currentTheme.id === 'light'
-                ? 'bg-white/95 text-slate-800 border-slate-200 shadow-slate-300/60'
-                : currentTheme.id === 'blueprint'
-                ? 'bg-sky-950/95 text-sky-100 border-sky-700 shadow-sky-950/60'
-                : 'bg-slate-900/95 text-slate-100 border-slate-700 shadow-black/60'
-            }`}>
-              <span className="text-[10px] uppercase tracking-wider opacity-70">Zoom</span>
-              <span className="text-blue-500 font-black">{Math.round(zoom * 100)}%</span>
-            </div>
-          </div>
-        )}
       </div>
-    )}
-
-      {/* =================================================================== */}
-      {/* BARRA DE AVALIAÇÃO FSRS: SOMENTE APÓS EXPLORAR/REVELAR TODO O FLUXO */}
-      {/* =================================================================== */}
-      {onAvaliarRevisao && todosCompletos && (
-        <div className={`w-full max-w-4xl mx-auto px-2 sm:px-4 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl border shadow-xl backdrop-blur-md shrink-0 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-1.5 sm:gap-2.5 z-20 transition-all mt-1 ${
-          currentTheme.id === 'light'
-            ? 'bg-white/95 border-slate-200 text-slate-900 shadow-slate-300/40'
-            : currentTheme.id === 'blueprint'
-            ? 'bg-sky-950/95 border-sky-800 text-sky-100 shadow-sky-950/80'
-            : 'bg-slate-900/95 border-slate-800 text-slate-100 shadow-black/60'
-        }`}>
-          {/* Lado Esquerdo: Apenas no Desktop (no mobile o Desafio já está visível no topo, economizando 120px de tela) */}
-          <div className="hidden md:block flex-1 min-w-0 w-full">
-            {exibirDicas && perolaClinica ? (
-              <div className="flex items-start gap-2.5 p-2 sm:px-3 sm:py-2 rounded-xl bg-amber-100/95 border-2 border-amber-300/95 text-slate-950 text-xs sm:text-[12.5px] leading-relaxed font-medium shadow-2xs">
-                <Lightbulb className="w-4 h-4 shrink-0 text-amber-700 mt-0.5" />
-                <div className="flex-1 min-w-0 whitespace-normal break-words">
-                  <span className="font-black uppercase text-[10px] tracking-wider text-amber-900 block mb-0.5">
-                    Dica Clínica:
-                  </span>
-                  <span className="text-slate-900 font-semibold leading-relaxed">
-                    {perolaClinica}
-                  </span>
-                </div>
-              </div>
-            ) : perguntaGatilho ? (
-              <div className="flex items-start gap-2 p-2 sm:px-3 sm:py-1.5 rounded-xl bg-slate-100/80 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-[11px] leading-relaxed font-medium">
-                <HelpCircle className="w-3.5 h-3.5 shrink-0 text-blue-500 mt-0.5" />
-                <div className="flex-1 min-w-0 whitespace-normal break-words text-slate-800 dark:text-slate-200">
-                  <span className="font-black uppercase text-[9px] tracking-wider text-blue-600 dark:text-blue-400 block mb-0.5">
-                    Pergunta Gatilho:
-                  </span>
-                  <span className="line-clamp-2">{perguntaGatilho}</span>
-                </div>
-              </div>
-            ) : (
-              <span className={`text-[11px] sm:text-xs font-semibold ${
-                currentTheme.id === 'light' ? 'text-slate-700' : 'text-slate-300'
-              }`}>
-                Fluxograma concluído! Como foi sua retenção clínica neste caso?
-              </span>
-            )}
-          </div>
-
-          {/* Lado Direito: Os 4 Botões FSRS de Fixação (Compactos e Ergonômicos no Celular) */}
-          <div className="grid grid-cols-4 gap-1.5 sm:gap-2 w-full md:w-auto shrink-0">
-            <button
-              type="button"
-              onClick={() => onAvaliarRevisao('errei')}
-              className="py-1.5 sm:py-2 px-2 sm:px-3 rounded-xl bg-rose-600 hover:bg-rose-500 active:scale-95 text-white font-bold text-xs flex flex-col items-center justify-center transition-all shadow-xs cursor-pointer min-h-[40px] sm:min-h-[44px]"
-            >
-              <span className="text-[11px] sm:text-xs leading-tight">Errei</span>
-              <span className="text-[9px] font-semibold opacity-90">
-                {formatarTempoMinutos(infoRodada.timers.erreiMinutos)}
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onAvaliarRevisao('dificil')}
-              className="py-1.5 sm:py-2 px-2 sm:px-3 rounded-xl bg-amber-600 hover:bg-amber-500 active:scale-95 text-white font-bold text-xs flex flex-col items-center justify-center transition-all shadow-xs cursor-pointer min-h-[40px] sm:min-h-[44px]"
-            >
-              <span className="text-[11px] sm:text-xs leading-tight">Difícil</span>
-              <span className="text-[9px] font-semibold opacity-90">
-                {formatarTempoMinutos(infoRodada.timers.dificilMinutos)}
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onAvaliarRevisao('bom')}
-              className="py-1.5 sm:py-2 px-2 sm:px-3 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-bold text-xs flex flex-col items-center justify-center transition-all shadow-xs cursor-pointer min-h-[40px] sm:min-h-[44px]"
-            >
-              <span className="text-[11px] sm:text-xs leading-tight">Bom</span>
-              <span className="text-[9px] font-semibold opacity-90">
-                {formatarTempoMinutos(infoRodada.timers.bomMinutos)}
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onAvaliarRevisao('facil')}
-              className="py-1.5 sm:py-2 px-2 sm:px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs flex flex-col items-center justify-center transition-all shadow-xs cursor-pointer min-h-[40px] sm:min-h-[44px]"
-            >
-              <span className="text-[11px] sm:text-xs leading-tight">Fácil</span>
-              <span className="text-[9px] font-semibold opacity-90">
-                {formatarTempoMinutos(infoRodada.timers.facilMinutos)}
-              </span>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Barra de Desafio Ativo: enquanto houver nós pendentes a revelar */}
-      {onAvaliarRevisao && !todosCompletos && (
-        <div className={`w-full max-w-4xl mx-auto px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl border shadow-xs backdrop-blur-md shrink-0 flex items-center justify-between gap-2 z-20 transition-all mt-1 ${
-          currentTheme.id === 'light'
-            ? 'bg-white/95 border-slate-200 text-slate-700'
-            : currentTheme.id === 'blueprint'
-            ? 'bg-sky-950/95 border-sky-900 text-sky-200'
-            : 'bg-slate-900/95 border-slate-800 text-slate-300'
-        }`}>
-          <div className="flex items-center gap-1.5 min-w-0 text-xs">
-            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
-            <span className="whitespace-nowrap text-slate-800 dark:text-slate-200 text-[11px] sm:text-xs">
-              <span className="hidden sm:inline">Desvende os </span><strong>{totalNos - nosReveladosCount}</strong> nós pendentes
-            </span>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleRevelarTodos}
-            className="text-[10px] sm:text-[11px] font-bold px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-600 shrink-0 transition-colors cursor-pointer active:scale-95"
-          >
-            Revelar Tudo
-          </button>
-        </div>
-      )}
     </div>
   );
 };

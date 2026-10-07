@@ -12,10 +12,10 @@ function versionGeneratorPlugin(): Plugin {
     name: 'version-generator-plugin',
     generateBundle() {
       const versionData = {
-        version: '2.4.6',
+        version: '2.5.0',
         buildTime: buildIsoTime,
         buildDateFormatted: buildFormattedTime,
-        releaseNotes: "MedCards v2.4.6: Suporte oficial e completo para instalação como WebAPK nativo (PWA instalável com inicialização instantânea no Android e desktop), modo 'Estudo' sem repetição para a 1ª resolução de flashcards (ciclo de repetição reservado exclusivamente para o modo 'Revisão'), resolução definitiva de travamentos/congelamentos ao alternar entre os modos Canvas e Trilha nos fluxogramas, e rolagem nativa ultrafluida na Trilha."
+        releaseNotes: "MedCards v2.5.0: Estética minimalista de leitura confortável, resposta instantânea no celular, seletor rápido de quantidade no prompt do Gemini (20, personalizado +/-5 ou Número Ideal), e novos formatos simplificados de Passo a Passo (Passo 1 sempre oculto inicialmente) e Fluxograma Clínico em árvore visual."
       };
       this.emitFile({
         type: 'asset',

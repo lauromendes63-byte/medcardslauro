@@ -1,21 +1,14 @@
 import React, { useState } from 'react';
-import { 
-  Plus, 
-  Trash2, 
-  GitFork, 
-  Sparkles, 
-  CheckCircle2,
-  Stethoscope, 
-  Eye,
+import {
+  Plus,
+  Trash2,
+  GitFork,
+  Sparkles,
   ChevronUp,
   ChevronDown,
-  Copy,
-  Layers,
   ArrowDown,
-  Activity,
-  HeartPulse,
-  ShieldAlert,
-  Zap
+  ClipboardPaste,
+  Check
 } from 'lucide-react';
 import { ClinicalFormatToolbar } from './ClinicalFormatToolbar';
 import { FormattedClinicalText } from './FormattedClinicalText';
@@ -32,93 +25,73 @@ interface FlowchartBuilderProps {
   onChange: (novosBlocos: BlocoFluxogramaItem[]) => void;
 }
 
-const CATEGORIAS_ETAPA_RAPIDA = [
-  { rotulo: 'Triagem & Sinais', icone: Activity, cor: 'text-blue-700 bg-blue-50 border-blue-200' },
-  { rotulo: 'Exame / Investigação', icone: Stethoscope, cor: 'text-indigo-700 bg-indigo-50 border-indigo-200' },
-  { rotulo: 'Conduta & Fármaco', icone: HeartPulse, cor: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
-  { rotulo: 'Alerta Crítico', icone: ShieldAlert, cor: 'text-rose-700 bg-rose-50 border-rose-200' },
-  { rotulo: 'Reavaliação / UTI', icone: Zap, cor: 'text-amber-700 bg-amber-50 border-amber-200' },
-];
-
-const PRESETS_FLUXOGRAMAS = [
+const PRESETS_PASSO_A_PASSO: {
+  nome: string;
+  descricao: string;
+  blocos: BlocoFluxogramaItem[];
+}[] = [
   {
     nome: 'Sequência Rápida de Intubação (7 Ps)',
-    descricao: 'Protocolo padrão de emergência da SRI para via aérea definitiva',
+    descricao: 'Ordem cronológica dos 7 Ps na intubação de emergência',
     blocos: [
       {
         id: 'sri-1',
-        titulo: '1. Preparação (Equipamentos e Drogas)',
-        condutaOuAcao: '• Testar laringoscópio e ==tubo orotraqueal (7.5 a 8.5)==\n• Fio guia pré-moldado\n• Aspirador funcionando e monitorização completa\n• [azul]Acesso venoso calibroso[/azul]',
+        titulo: 'Preparação',
+        condutaOuAcao: 'Checar laringoscópio, ==tubo orotraqueal (7.5 a 8.5)==, fio-guia, aspirador a vácuo, monitorização multiparamétrica e [azul]acesso venoso calibroso[/azul].',
       },
       {
         id: 'sri-2',
-        titulo: '2. Pré-Oxigenação (Lavagem de Nitrogênio)',
-        condutaOuAcao: '• FiO2 a 100% sob máscara com reservatório por ==3 a 5 minutos== (ou 8 respirações profundas de capacidade vital).\n• Meta: O2 alveolar > 90% sem ventilar com pressão positiva.',
+        titulo: 'Pré-oxigenação',
+        condutaOuAcao: 'Ofertar O₂ a 100% sob máscara não reinalante por ==3 a 5 minutos== (lavagem de nitrogênio alveolar sem ventilação com pressão positiva).',
       },
       {
         id: 'sri-3',
-        titulo: '3. Pré-Tratamento / Otimização Hemodinâmica',
-        condutaOuAcao: '• Corrigir hipotensão prévia com cristaloide ou vasopressor (evitar colapso peri-intubação).\n• [azul]Fentanil 1-3 mcg/kg[/azul] se coronariopatia, dissecção ou hipertensão intracraniana.',
+        titulo: 'Pré-tratamento / Otimização',
+        condutaOuAcao: 'Estabilizar hemodinâmica (cristaloide/noradrenalina se hipotensão) e considerar [azul]Fentanil 1–3 mcg/kg[/azul] se HIC, dissecção aórtica ou SCA.',
       },
       {
         id: 'sri-4',
-        titulo: '4. Paralisia com Indução Simultânea',
-        condutaOuAcao: '• Hipnótico: [azul]Etomidato 0.3 mg/kg[/azul] (estável) ou [azul]Cetamina 1.5-2 mg/kg[/azul] (broncoespasmo/choque).\n• Bloqueador: [azul]Succinilcolina 1.5 mg/kg[/azul] ou [azul]Rocurônio 1.2 mg/kg[/azul].',
+        titulo: 'Paralisia com Indução',
+        condutaOuAcao: 'Hipnótico ([azul]Etomidato 0.3 mg/kg[/azul] ou [azul]Cetamina 1.5–2 mg/kg[/azul]) seguido imediatamente de bloqueador neuromuscular ([azul]Succinilcolina 1.5 mg/kg[/azul] ou [azul]Rocurônio 1.2 mg/kg[/azul]).',
       },
       {
         id: 'sri-5',
-        titulo: '5. Posicionamento e Passagem do Tubo',
-        condutaOuAcao: '• Aguardar 45-60s de relaxamento completo.\n• Laringoscopia direta ou videolaringoscopia.\n• Inserção do tubo visualizando a passagem pelas cordas vocais.',
+        titulo: 'Posicionamento e Passagem do Tubo',
+        condutaOuAcao: 'Posição olfativa (sniffing), aguardar 45–60s para apneia/relaxamento e realizar laringoscopia com passagem do tubo sob visão direta.',
       },
       {
         id: 'sri-6',
-        titulo: '6. Pós-Intubação e Fixação',
-        condutaOuAcao: '• Insuflar balonete (cuff 20-30 cmH2O).\n• Confirmar posição com ==Capnografia em onda== + ausculta (epigástrio e ápices).\n• Sedoanalgesia contínua iniciada imediatamente.',
-      }
-    ]
+        titulo: 'Pós-intubação',
+        condutaOuAcao: 'Insuflar balonete (20–30 cmH₂O), confirmar com ==capnografia em onda== + ausculta epigástrica/pulmonar, fixar o tubo e iniciar sedoanalgesia contínua.',
+      },
+    ],
   },
   {
-    nome: 'IAM com Supra de ST (IAMCSST)',
-    descricao: 'Algoritmo de dor torácica típica com reperfusão imediata',
+    nome: 'Abordagem Inicial da Anafilaxia Grave',
+    descricao: 'Passos imediatos de estabilização na sala de emergência',
     blocos: [
       {
-        id: 'f1',
-        titulo: 'Dor torácica típica + ECG no PS (< 10 min)',
-        condutaOuAcao: '• [azul]AAS 200mg mastigado[/azul] + [azul]Ticagrelor 180mg[/azul] (ou Clopidogrel 300mg)\n• Heparina não fracionada IV\n• Avaliar tempo para Hemodinâmica (CATE)',
+        id: 'anaf-1',
+        titulo: 'Adrenalina IM Imediata',
+        condutaOuAcao: '[azul]Adrenalina 1:1000 (1 mg/mL) 0,3 a 0,5 mg IM[/azul] na face anterolateral da coxa (vasto lateral). Pode repetir a cada 5–15 min.',
       },
       {
-        id: 'f2',
-        titulo: 'Tempo para hemodinâmica < 120 minutos',
-        condutaOuAcao: '• Encaminhar IMEDIATAMENTE para Angioplastia Primária\n• Meta Porta-Balão < 90 minutos (ou < 120 min se transferência)',
+        id: 'anaf-2',
+        titulo: 'Decúbito, O₂ e Acesso Calibroso',
+        condutaOuAcao: 'Posicionar em decúbito dorsal com MMII elevados, suplementar ==O₂ a 100%== e avaliar necessidade de via aérea definitiva precoce se estridor.',
       },
       {
-        id: 'f3',
-        titulo: 'Tempo para hemodinâmica > 120 minutos',
-        condutaOuAcao: '• [vermelho]Trombólise química imediata[/vermelho] com [azul]Tenecteplase (TNK)[/azul] ou Alteplase\n• Meta Porta-Agulha < 30 minutos\n• Se falha de reperfusão em 90 min: CATE de Resgate',
-      }
-    ]
+        id: 'anaf-3',
+        titulo: 'Expansão Volêmica Rápida',
+        condutaOuAcao: 'Infundir ==SF 0,9% ou Ringer Lactato 20 mL/kg== em bolus rápido se hipotensão persistente.',
+      },
+      {
+        id: 'anaf-4',
+        titulo: 'Terapia Adjuvante (2ª Linha)',
+        condutaOuAcao: 'Anti-histamínico ([azul]Difenidramina 25–50 mg IV[/azul]), corticoide ([azul]Metilprednisolona 1–2 mg/kg IV[/azul] para prevenir reação bifásica) e broncodilatador se broncoespasmo.',
+      },
+    ],
   },
-  {
-    nome: 'Manejo do Potássio na CAD',
-    descricao: 'Reposição hidroeletrolítica e timing da insulinoterapia',
-    blocos: [
-      {
-        id: 'f4',
-        titulo: '1. Coleta de Gasometria e Eletrólitos na Cetoacidose',
-        condutaOuAcao: '• Se [vermelho]K+ < 3.3 mEq/L[/vermelho]: NÃO iniciar insulina!\n• Repor KCl 20-30 mEq/h até potássio > 3.3 pelo risco de arritmia letal.',
-      },
-      {
-        id: 'f5',
-        titulo: '2. Potássio Normal (3.3 a 5.2 mEq/L)',
-        condutaOuAcao: '• Iniciar [azul]Insulina Regular 0.1 UI/kg/h[/azul] em bomba de infusão.\n• Associar KCl 20-30 mEq por litro de soro para prevenir hipocalemia rápida.',
-      },
-      {
-        id: 'f6',
-        titulo: '3. Potássio Alto (> 5.2 mEq/L)',
-        condutaOuAcao: '• Iniciar insulina regular normalmente.\n• Não repor potássio agora. Checar K+ a cada 2 horas.',
-      }
-    ]
-  }
 ];
 
 export const FlowchartBuilder: React.FC<FlowchartBuilderProps> = ({
@@ -126,19 +99,21 @@ export const FlowchartBuilder: React.FC<FlowchartBuilderProps> = ({
   onChange,
 }) => {
   const [mostrarPresets, setMostrarPresets] = useState(false);
+  const [mostrarColarLote, setMostrarColarLote] = useState(false);
+  const [textoLote, setTextoLote] = useState('');
 
-  const handleAdicionarBlocoFinal = () => {
+  const handleAdicionarPasso = () => {
     const novo: BlocoFluxogramaItem = {
-      id: `bloco-${Date.now()}`,
+      id: `passo-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       titulo: '',
       condutaOuAcao: '',
     };
     onChange([...blocos, novo]);
   };
 
-  const handleInserirBlocoApos = (index: number) => {
+  const handleInserirPassoApos = (index: number) => {
     const novo: BlocoFluxogramaItem = {
-      id: `bloco-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      id: `passo-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       titulo: '',
       condutaOuAcao: '',
     };
@@ -147,219 +122,259 @@ export const FlowchartBuilder: React.FC<FlowchartBuilderProps> = ({
     onChange(copia);
   };
 
-  const handleMoverBloco = (index: number, direcao: 'cima' | 'baixo') => {
+  const handleMoverPasso = (index: number, direcao: 'cima' | 'baixo') => {
     if (direcao === 'cima' && index === 0) return;
     if (direcao === 'baixo' && index === blocos.length - 1) return;
 
     const novoIndex = direcao === 'cima' ? index - 1 : index + 1;
     const copia = [...blocos];
-    const item = copia[index];
-    copia.splice(index, 1);
+    const [item] = copia.splice(index, 1);
     copia.splice(novoIndex, 0, item);
     onChange(copia);
   };
 
-  const handleDuplicarBloco = (bloco: BlocoFluxogramaItem, index: number) => {
-    const duplicado: BlocoFluxogramaItem = {
-      id: `bloco-${Date.now()}`,
-      titulo: `${bloco.titulo} (Cópia)`,
-      condutaOuAcao: bloco.condutaOuAcao,
-    };
-    const copia = [...blocos];
-    copia.splice(index + 1, 0, duplicado);
-    onChange(copia);
+  const handleAtualizarPasso = (id: string, campos: Partial<BlocoFluxogramaItem>) => {
+    onChange(blocos.map(b => (b.id === id ? { ...b, ...campos } : b)));
   };
 
-  const handleAtualizarBloco = (id: string, campos: Partial<BlocoFluxogramaItem>) => {
-    const atualizados = blocos.map(b => b.id === id ? { ...b, ...campos } : b);
-    onChange(atualizados);
-  };
-
-  const handleRemoverBloco = (id: string) => {
+  const handleRemoverPasso = (id: string) => {
     if (blocos.length <= 1) return;
     onChange(blocos.filter(b => b.id !== id));
   };
 
-  const handleAplicarPreset = (presetBlocos: BlocoFluxogramaItem[]) => {
-    onChange(presetBlocos);
-    setMostrarPresets(false);
+  const handleImportarTextoEmLote = () => {
+    const linhas = textoLote
+      .split(/\r?\n/)
+      .map(l => l.trim())
+      .filter(Boolean);
+
+    if (linhas.length === 0) return;
+
+    const novosPassos: BlocoFluxogramaItem[] = linhas.map((linha, idx) => {
+      const semPrefixo = linha
+        .replace(/^(?:passo|etapa)\s*#?\d+[\s:\-\.)]*/i, '')
+        .replace(/^\d+[\.\)\-]\s*/, '')
+        .replace(/^[•\-\*]\s*/, '')
+        .trim();
+
+      // Se tiver "Título: descrição curta", separa opcionalmente se o título for curto
+      const matchDoisPontos = semPrefixo.match(/^([^:]{3,42}):\s+(.+)$/);
+      if (matchDoisPontos) {
+        return {
+          id: `passo-${Date.now()}-${idx}`,
+          titulo: matchDoisPontos[1].trim(),
+          condutaOuAcao: matchDoisPontos[2].trim(),
+        };
+      }
+
+      return {
+        id: `passo-${Date.now()}-${idx}`,
+        titulo: '',
+        condutaOuAcao: semPrefixo,
+      };
+    });
+
+    onChange(novosPassos);
+    setTextoLote('');
+    setMostrarColarLote(false);
   };
 
   return (
-    <div className="space-y-3.5">
-      {/* Cabeçalho do Construtor */}
-      <div className="flex items-center justify-between gap-2.5 flex-wrap bg-gradient-to-r from-indigo-50/90 via-blue-50/70 to-indigo-50/90 p-3.5 sm:p-4 rounded-2xl border border-indigo-200/80 shadow-2xs">
-        <div>
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs">
-              <GitFork className="w-4 h-4" />
-            </div>
-            <div>
-              <span className="text-xs sm:text-sm font-extrabold text-indigo-950">
-                Passo a Passo Sequencial Clínico
+    <div className="space-y-3">
+      {/* Cabeçalho enxuto do Passo a Passo */}
+      <div className="flex items-center justify-between gap-2 flex-wrap bg-slate-50 p-3 rounded-2xl border border-slate-200/80">
+        <div className="flex items-center gap-2">
+          <span className="w-7 h-7 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-2xs shrink-0">
+            <GitFork className="w-3.5 h-3.5" />
+          </span>
+          <div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs sm:text-sm font-bold text-slate-900">
+                Passos Sequenciais
               </span>
-              <span className="ml-2 text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800">
-                {blocos.length} {blocos.length === 1 ? 'etapa' : 'etapas'}
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                {blocos.length} {blocos.length === 1 ? 'passo' : 'passos'}
               </span>
             </div>
+            <p className="text-[11px] text-slate-500">
+              Todos os passos (do Passo 1 ao fim) iniciam ocluídos na revisão para você lembrar na ordem.
+            </p>
           </div>
-          <p className="text-[11px] text-indigo-800/80 mt-1">
-            Construa o fluxo cronológico das condutas. Use o trilho visual para reordenar ou inserir passos intermediários.
-          </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 flex-wrap">
           <button
             type="button"
-            onClick={() => setMostrarPresets(!mostrarPresets)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-indigo-200 text-indigo-800 hover:bg-indigo-50 text-xs font-bold shadow-2xs transition-all cursor-pointer active:scale-95"
+            onClick={() => {
+              setMostrarColarLote(!mostrarColarLote);
+              setMostrarPresets(false);
+            }}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 text-[11px] font-semibold transition-all cursor-pointer active:scale-95"
           >
-            <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-            <span>{mostrarPresets ? 'Ocultar Modelos' : 'Carregar Modelo Clínico'}</span>
+            <ClipboardPaste className="w-3.5 h-3.5 text-blue-600" />
+            <span>Colar Lista</span>
           </button>
 
           <button
             type="button"
-            onClick={handleAdicionarBlocoFinal}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-bold shadow-xs active:scale-95 transition-all cursor-pointer"
+            onClick={() => {
+              setMostrarPresets(!mostrarPresets);
+              setMostrarColarLote(false);
+            }}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 text-[11px] font-semibold transition-all cursor-pointer active:scale-95"
           >
-            <Plus className="w-4 h-4" />
-            <span>Nova Etapa</span>
+            <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+            <span>Modelos</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleAdicionarPasso}
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold shadow-2xs active:scale-95 transition-all cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>+ Passo</span>
           </button>
         </div>
       </div>
 
-      {/* Gaveta de Modelos Prontos */}
-      {mostrarPresets && (
-        <div className="p-4 bg-white rounded-2xl border border-indigo-200 shadow-sm space-y-2.5 animate-in fade-in">
-          <div className="flex items-center justify-between pb-1 border-b border-indigo-100">
-            <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-              <span>Selecione um Algoritmo de Referência:</span>
+      {/* Colar passos em lote (1 linha = 1 passo) */}
+      {mostrarColarLote && (
+        <div className="p-3.5 bg-blue-50/50 rounded-2xl border border-blue-200 space-y-2.5 animate-in fade-in">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-800">
+              Cole sua lista de passos (1 passo por linha):
             </span>
-            <span className="text-[10px] text-slate-400 font-medium">Substitui as etapas atuais</span>
+            <button
+              type="button"
+              onClick={() => setMostrarColarLote(false)}
+              className="text-[11px] text-slate-400 hover:text-slate-600 cursor-pointer"
+            >
+              Fechar
+            </button>
           </div>
+          <textarea
+            value={textoLote}
+            onChange={(e) => setTextoLote(e.target.value)}
+            rows={4}
+            placeholder={"1. Preparação: separar laringo, tubo e drogas\n2. Pré-oxigenação: O2 100% por 3-5 min\n3. Indução e paralisia: Etomidato + Succinilcolina\n4. Passagem do tubo e confirmação com capnografia"}
+            className="w-full p-2.5 rounded-xl bg-white border border-blue-200 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 leading-relaxed"
+          />
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={handleImportarTextoEmLote}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold cursor-pointer active:scale-95"
+            >
+              <Check className="w-3.5 h-3.5" />
+              <span>Gerar Passos Automaticamente</span>
+            </button>
+          </div>
+        </div>
+      )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-            {PRESETS_FLUXOGRAMAS.map((preset) => (
+      {/* Modelos rápidos */}
+      {mostrarPresets && (
+        <div className="p-3.5 bg-white rounded-2xl border border-slate-200 shadow-2xs space-y-2 animate-in fade-in">
+          <span className="text-xs font-bold text-slate-700 block">
+            Modelos de Passo a Passo:
+          </span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {PRESETS_PASSO_A_PASSO.map((preset) => (
               <button
                 key={preset.nome}
                 type="button"
-                onClick={() => handleAplicarPreset(preset.blocos)}
-                className="p-3 rounded-2xl border border-indigo-100 hover:border-indigo-400 bg-indigo-50/30 hover:bg-indigo-50/80 text-left transition-all flex flex-col justify-between gap-1.5 cursor-pointer group"
+                onClick={() => {
+                  onChange(preset.blocos);
+                  setMostrarPresets(false);
+                }}
+                className="p-2.5 rounded-xl border border-slate-200 hover:border-blue-400 bg-slate-50/60 hover:bg-blue-50/40 text-left transition-all cursor-pointer"
               >
-                <div>
-                  <div className="text-xs font-bold text-indigo-950 group-hover:text-indigo-800">
-                    {preset.nome}
-                  </div>
-                  <p className="text-[10.5px] text-slate-500 mt-0.5 line-clamp-2">
-                    {preset.descricao}
-                  </p>
-                </div>
-                <div className="flex items-center justify-between pt-1">
-                  <span className="text-[10px] text-indigo-700 font-bold bg-white px-2 py-0.5 rounded-full border border-indigo-200">
-                    {preset.blocos.length} etapas
-                  </span>
-                  <span className="text-[10px] font-bold text-indigo-600 group-hover:underline">
-                    Usar Exemplo →
-                  </span>
-                </div>
+                <div className="text-xs font-bold text-slate-900">{preset.nome}</div>
+                <p className="text-[10.5px] text-slate-500 mt-0.5">{preset.descricao}</p>
               </button>
             ))}
           </div>
         </div>
       )}
 
-      {/* Timeline Rail Sequencial */}
-      <div className="space-y-0 relative">
+      {/* Lista de Passos */}
+      <div className="space-y-1.5">
         {blocos.map((bloco, idx) => {
           const ehPrimeiro = idx === 0;
           const ehUltimo = idx === blocos.length - 1;
 
           return (
-            <div key={bloco.id} className="relative group">
-              {/* Trilho Visual com Seta e Botão de Inserção Intermediária */}
+            <div key={bloco.id}>
               {!ehPrimeiro && (
-                <div className="flex items-center justify-center my-2 relative">
-                  <div className="absolute inset-x-0 h-px bg-indigo-100 pointer-events-none" />
-                  <div className="relative z-10 flex items-center gap-2 bg-slate-50 px-2 py-0.5 rounded-full border border-indigo-200/60 shadow-3xs">
-                    <ArrowDown className="w-3.5 h-3.5 text-indigo-500 stroke-[2.5]" />
-                    <button
-                      type="button"
-                      onClick={() => handleInserirBlocoApos(idx - 1)}
-                      className="text-[10px] font-bold text-indigo-700 hover:text-indigo-900 hover:underline flex items-center gap-0.5 cursor-pointer"
-                      title="Inserir nova etapa exatamente aqui"
-                    >
-                      <Plus className="w-3 h-3 text-indigo-600" />
-                      <span>Inserir etapa aqui</span>
-                    </button>
-                  </div>
+                <div className="flex items-center justify-center py-0.5">
+                  <button
+                    type="button"
+                    onClick={() => handleInserirPassoApos(idx - 1)}
+                    className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-400 hover:text-blue-600 px-2 py-0.5 rounded-full hover:bg-blue-50 transition-colors cursor-pointer"
+                    title="Inserir passo intermediário aqui"
+                  >
+                    <ArrowDown className="w-3 h-3" />
+                    <span>+ inserir passo aqui</span>
+                  </button>
                 </div>
               )}
 
-              {/* Cartão da Etapa Clínica */}
-              <div className="p-4 bg-white rounded-3xl border border-slate-200/90 shadow-2xs hover:border-indigo-300 hover:shadow-xs transition-all space-y-3.5">
-                {/* Linha Superior: Número da Etapa, Título Hierárquico e Ações */}
-                <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-6 h-6 rounded-xl bg-indigo-600 text-white text-xs font-black flex items-center justify-center shadow-xs shrink-0">
+              <div className="p-3 sm:p-3.5 bg-white rounded-2xl border border-slate-200/90 shadow-3xs space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <span className="w-6 h-6 rounded-lg bg-blue-600 text-white text-xs font-black flex items-center justify-center shrink-0">
                       {idx + 1}
                     </span>
-                    <div>
-                      <span className="text-xs font-extrabold text-slate-900 block">
-                        {idx === 0 ? 'Ponto de Partida / Entrada Clínica' : `Etapa #${idx + 1}`}
-                      </span>
-                      <span className="text-[10px] text-slate-400">
-                        {idx === 0 ? 'Primeiro passo do protocolo' : `Conduta subsequente à etapa #${idx}`}
-                      </span>
-                    </div>
+                    <input
+                      type="text"
+                      value={bloco.titulo}
+                      onChange={(e) => handleAtualizarPasso(bloco.id, { titulo: e.target.value })}
+                      placeholder={`Título curto do Passo ${idx + 1} (opcional — ex: Pré-oxigenação)`}
+                      className="flex-1 min-w-0 px-2.5 py-1 rounded-lg bg-slate-50/80 border border-transparent hover:border-slate-200 focus:border-blue-400 focus:bg-white text-xs font-bold text-slate-800 focus:outline-none transition-colors"
+                    />
                   </div>
 
-                  {/* Ações Rápidas: Mover Cima/Baixo, Duplicar, Excluir */}
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 shrink-0">
+                    <ClinicalFormatToolbar
+                      targetInputId={`textarea-passo-resposta-${bloco.id}`}
+                      valorAtual={bloco.condutaOuAcao}
+                      onValorChange={(val) => handleAtualizarPasso(bloco.id, { condutaOuAcao: val })}
+                      compacto={true}
+                      mostrarTopico={false}
+                    />
                     <button
                       type="button"
                       disabled={ehPrimeiro}
-                      onClick={() => handleMoverBloco(idx, 'cima')}
-                      className={`p-1.5 rounded-lg border transition-all ${
-                        ehPrimeiro 
-                          ? 'border-slate-100 text-slate-300 cursor-not-allowed' 
-                          : 'border-slate-200 text-slate-600 hover:bg-slate-100 cursor-pointer active:scale-95'
+                      onClick={() => handleMoverPasso(idx, 'cima')}
+                      className={`p-1 rounded-lg border ${
+                        ehPrimeiro
+                          ? 'border-slate-100 text-slate-300 cursor-not-allowed'
+                          : 'border-slate-200 text-slate-500 hover:bg-slate-100 cursor-pointer'
                       }`}
-                      title="Mover etapa para cima"
+                      title="Mover para cima"
                     >
                       <ChevronUp className="w-3.5 h-3.5" />
                     </button>
-
                     <button
                       type="button"
                       disabled={ehUltimo}
-                      onClick={() => handleMoverBloco(idx, 'baixo')}
-                      className={`p-1.5 rounded-lg border transition-all ${
-                        ehUltimo 
-                          ? 'border-slate-100 text-slate-300 cursor-not-allowed' 
-                          : 'border-slate-200 text-slate-600 hover:bg-slate-100 cursor-pointer active:scale-95'
+                      onClick={() => handleMoverPasso(idx, 'baixo')}
+                      className={`p-1 rounded-lg border ${
+                        ehUltimo
+                          ? 'border-slate-100 text-slate-300 cursor-not-allowed'
+                          : 'border-slate-200 text-slate-500 hover:bg-slate-100 cursor-pointer'
                       }`}
-                      title="Mover etapa para baixo"
+                      title="Mover para baixo"
                     >
                       <ChevronDown className="w-3.5 h-3.5" />
                     </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleDuplicarBloco(bloco, idx)}
-                      className="p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-indigo-600 cursor-pointer transition-colors active:scale-95"
-                      title="Duplicar esta etapa"
-                    >
-                      <Copy className="w-3.5 h-3.5" />
-                    </button>
-
                     {blocos.length > 1 && (
                       <button
                         type="button"
-                        onClick={() => handleRemoverBloco(bloco.id)}
-                        className="p-1.5 rounded-lg border border-slate-200 text-slate-400 hover:text-rose-600 hover:border-rose-200 hover:bg-rose-50 transition-colors cursor-pointer active:scale-95"
-                        title="Excluir esta etapa"
+                        onClick={() => handleRemoverPasso(bloco.id)}
+                        className="p-1 rounded-lg border border-slate-200 text-slate-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
+                        title="Remover passo"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -367,106 +382,33 @@ export const FlowchartBuilder: React.FC<FlowchartBuilderProps> = ({
                   </div>
                 </div>
 
-                {/* Tags Rápidas de Classificação Clínica */}
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[10px] font-bold text-slate-400 mr-1">Classificação rápida:</span>
-                  {CATEGORIAS_ETAPA_RAPIDA.map((cat) => {
-                    const Icone = cat.icone;
-                    return (
-                      <button
-                        key={cat.rotulo}
-                        type="button"
-                        onClick={() => {
-                          const prefixo = `${cat.rotulo}: `;
-                          if (!bloco.titulo.startsWith(prefixo)) {
-                            handleAtualizarBloco(bloco.id, { titulo: `${prefixo}${bloco.titulo.replace(/^[A-Za-z0-9\s/&]+:\s*/, '')}` });
-                          }
-                        }}
-                        className={`text-[9.5px] font-bold px-2 py-0.5 rounded-lg border transition-all flex items-center gap-1 cursor-pointer active:scale-95 ${cat.cor}`}
-                      >
-                        <Icone className="w-2.5 h-2.5" />
-                        <span>{cat.rotulo}</span>
-                      </button>
-                    );
-                  })}
-                </div>
+                <textarea
+                  id={`textarea-passo-resposta-${bloco.id}`}
+                  rows={2}
+                  value={bloco.condutaOuAcao}
+                  onChange={(e) => handleAtualizarPasso(bloco.id, { condutaOuAcao: e.target.value })}
+                  placeholder={`Descreva o Passo ${idx + 1} (conduta, dose ou ação)...`}
+                  className="w-full p-2.5 rounded-xl bg-slate-50/40 focus:bg-white border border-slate-200 focus:border-blue-500 text-xs sm:text-[13px] text-slate-900 focus:outline-none leading-relaxed"
+                />
 
-                {/* Campos da Etapa */}
-                <div className="space-y-3">
-                  {/* Título / Pergunta Gatilho da Etapa */}
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-800 block mb-1">
-                      Título da Etapa ou Achado Clínico:
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={bloco.titulo}
-                      onChange={(e) => handleAtualizarBloco(bloco.id, { titulo: e.target.value })}
-                      placeholder="Ex: 2. ID e Separação de Materiais ou ECG com Supra de ST"
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50/70 border border-slate-200 text-xs sm:text-[13px] font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-2xs"
-                    />
+                {bloco.condutaOuAcao.trim() && (
+                  <div className="px-2.5 py-1.5 bg-slate-50/80 rounded-xl border border-slate-100 text-xs text-slate-700">
+                    <FormattedClinicalText text={bloco.condutaOuAcao} />
                   </div>
-
-                  {/* Resposta / Condutas Detalhadas */}
-                  <div className="space-y-1.5">
-                    <div className="flex flex-wrap items-center justify-between gap-1.5">
-                      <label 
-                        htmlFor={`textarea-passo-resposta-${bloco.id}`}
-                        className="text-xs font-bold text-emerald-950 flex items-center gap-1.5"
-                      >
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                        <span>Conduta Médica / Resposta Esperada:</span>
-                      </label>
-
-                      {/* Barra de Ferramentas de Formatação Clínica */}
-                      <ClinicalFormatToolbar
-                        targetInputId={`textarea-passo-resposta-${bloco.id}`}
-                        valorAtual={bloco.condutaOuAcao}
-                        onValorChange={(val) => handleAtualizarBloco(bloco.id, { condutaOuAcao: val })}
-                        compacto={true}
-                        mostrarTopico={true}
-                      />
-                    </div>
-
-                    <textarea
-                      id={`textarea-passo-resposta-${bloco.id}`}
-                      rows={4}
-                      required
-                      value={bloco.condutaOuAcao}
-                      onChange={(e) => handleAtualizarBloco(bloco.id, { condutaOuAcao: e.target.value })}
-                      placeholder={"Ex:\n• Laringoscópio completo testado\n• ==Tubo Orotraqueal nº 7.5 a 8.5== com cuff\n• [azul]Fio guia pré-moldado[/azul] sem ultrapassar a ponta"}
-                      className="w-full p-3.5 rounded-2xl bg-white border border-emerald-300 text-xs sm:text-[13.5px] font-sans text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 shadow-2xs leading-relaxed"
-                    />
-
-                    {/* Prévia ao Vivo da Resposta Formatada */}
-                    {bloco.condutaOuAcao && (
-                      <div className="p-3 bg-emerald-50/40 rounded-2xl border border-emerald-200/80 text-left space-y-1.5 mt-2">
-                        <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-800 uppercase tracking-wider">
-                          <Eye className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>Prévia Formatada de Estudo:</span>
-                        </div>
-                        <div className="text-xs sm:text-[13.5px] leading-relaxed bg-white/95 p-3 rounded-xl border border-emerald-100 shadow-3xs">
-                          <FormattedClinicalText text={bloco.condutaOuAcao} />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
+                )}
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* Botão de Adição no Fim da Sequência */}
       <button
         type="button"
-        onClick={handleAdicionarBlocoFinal}
-        className="w-full py-3 rounded-2xl border-2 border-dashed border-indigo-200 hover:border-indigo-500 bg-indigo-50/30 hover:bg-indigo-50/80 text-indigo-800 text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-3xs active:scale-98"
+        onClick={handleAdicionarPasso}
+        className="w-full py-2.5 rounded-2xl border border-dashed border-slate-300 hover:border-blue-400 text-slate-600 hover:text-blue-600 hover:bg-blue-50/40 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
       >
-        <Plus className="w-4 h-4 text-indigo-600" />
-        <span>Adicionar Próxima Etapa ao Algoritmo</span>
+        <Plus className="w-4 h-4" />
+        <span>Adicionar Passo {blocos.length + 1}</span>
       </button>
     </div>
   );

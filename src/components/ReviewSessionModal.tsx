@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { 
   X, 
   RotateCw, 
@@ -25,7 +25,8 @@ import {
   Activity,
   XCircle,
   Trash2,
-  CheckCheck
+  CheckCheck,
+  BookOpen
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { CardClinico, MascaraImagem, BlocoOclusao, FluxogramaComplexoDados } from '../types';
@@ -34,7 +35,49 @@ import { StorageService } from '../services/storage';
 import { ComplexFlowchartViewer } from './ComplexFlowchartViewer';
 import { FormattedClinicalText } from './FormattedClinicalText';
 import { extrairPerguntaObjetiva } from '../utils/clinicalTextUtils';
+import { obterPassosNormalizados, limparPerguntaNorteadora } from '../utils/flowchartNormalizer';
 import { EixoEmojiBadge } from './EixoEmojiBadge';
+
+/**
+ * Cronômetro isolado em subcomponente memoizado para evitar re-renderizar
+ * o modal inteiro e o texto clínico a cada 1 segundo no celular.
+ */
+const SessionTimerBadge: React.FC<{ resetKey: number; paused: boolean; comfortMode?: boolean }> = React.memo(({
+  resetKey,
+  paused,
+  comfortMode = false,
+}) => {
+  const [segundos, setSegundos] = useState(0);
+
+  useEffect(() => {
+    setSegundos(0);
+  }, [resetKey]);
+
+  useEffect(() => {
+    if (paused) return;
+    const interval = setInterval(() => {
+      setSegundos(prev => prev + 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [resetKey, paused]);
+
+  const mins = Math.floor(segundos / 60);
+  const secs = segundos % 60;
+  const formatado = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+
+  return (
+    <div
+      className={`flex items-center gap-1 text-[11px] font-mono font-semibold px-2 py-1 rounded-lg border ${
+        comfortMode
+          ? 'bg-[#EFECE6] text-stone-700 border-[#E2DDD3]'
+          : 'bg-zinc-100/90 text-zinc-600 border-zinc-200/80'
+      }`}
+    >
+      <Clock className="w-3 h-3 text-zinc-400" />
+      <span>{formatado}</span>
+    </div>
+  );
+});
 
 interface ReviewSessionModalProps {
   cards: CardClinico[];
@@ -61,10 +104,28 @@ export const ReviewSessionModal: React.FC<ReviewSessionModalProps> = ({
   const [filaCards, setFilaCards] = useState<CardClinico[]>(cards);
   const [indiceAtual, setIndiceAtual] = useState(initialIndex);
   const [mostrarVerso, setMostrarVerso] = useState(false);
-  const [tempoInicioCard, setTempoInicioCard] = useState<number>(Date.now());
-  const [tempoDecorridoSegundos, setTempoDecorridoSegundos] = useState<number>(0);
+  const tempoInicioCardRef = useRef<number>(Date.now());
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const [sessaoFinalizada, setSessaoFinalizada] = useState(false);
   const [exibirDicas, setExibirDicas] = useState<boolean>(() => StorageService.getExibirDicas());
+  const [confortoVisual, setConfortoVisual] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('medcards_conforto_visual');
+      return saved ? JSON.parse(saved) : false;
+    } catch {
+      return false;
+    }
+  });
+
+  const handleToggleConfortoVisual = useCallback(() => {
+    setConfortoVisual(prev => {
+      const novo = !prev;
+      try {
+        localStorage.setItem('medcards_conforto_visual', JSON.stringify(novo));
+      } catch {}
+      return novo;
+    });
+  }, []);
 
   // Sincronizar modo inicial ou atualizações externas
   useEffect(() => {
@@ -90,13 +151,13 @@ export const ReviewSessionModal: React.FC<ReviewSessionModalProps> = ({
     onIndexChange?.(indiceAtual);
   }, [indiceAtual, onIndexChange]);
 
-  const handleToggleExibirDicas = () => {
+  const handleToggleExibirDicas = useCallback(() => {
     setExibirDicas(prev => {
       const novo = !prev;
       StorageService.setExibirDicas(novo);
       return novo;
     });
-  };
+  }, []);
 
   // Estados interativos por card (idênticos aos de Provas e Simulados)
   const [respostaSelecionada, setRespostaSelecionada] = useState<number | null>(null);
@@ -115,16 +176,15 @@ export const ReviewSessionModal: React.FC<ReviewSessionModalProps> = ({
   const cardAtual = filaCards[indiceAtual];
   const totalCards = filaCards.length;
 
-  // FIX #9: leituras de storage em useMemo ao invés de diretamente no render
-  // Evita JSON.parse + localStorageGet a cada re-render do componente
+  // Leituras de storage memoizadas para zero bloqueio de renderização
   const configTimers = useMemo(() => StorageService.getConfiguracaoTimers(), []);
   const eixos = useMemo(() => StorageService.getEixos(), [cardAtual?.eixoId]);
   const eixoDoCard = useMemo(() => eixos.find(e => e.id === cardAtual?.eixoId), [eixos, cardAtual?.eixoId]);
   const topicoDoCard = useMemo(() => eixoDoCard?.topicos?.find(t => t.id === cardAtual?.topicoId), [eixoDoCard, cardAtual?.topicoId]);
   const infoRodada = useMemo(() => cardAtual ? obterInfoRodadaCard(cardAtual, topicoDoCard, configTimers) : null, [cardAtual, topicoDoCard, configTimers]);
 
-  // FIX #6: rastreia quantas vezes cada card foi re-enfileirado por erro (máx 2)
-  const reEnqueueCountRef = React.useRef<Record<string, number>>({});
+  // Rastreia quantas vezes cada card foi re-enfileirado por erro (máx 2)
+  const reEnqueueCountRef = useRef<Record<string, number>>({});
 
   const [isQuickEditOpen, setIsQuickEditOpen] = useState(false);
   const [quickPergunta, setQuickPergunta] = useState('');
@@ -194,25 +254,18 @@ export const ReviewSessionModal: React.FC<ReviewSessionModalProps> = ({
     setTimeout(() => setQuickToast(null), 2200);
   };
 
-  // Resetar estados interativos e cronômetro a cada novo card
+  // Resetar estados interativos e cronômetro a cada novo card + scroll imediato p/ topo
   useEffect(() => {
-    setTempoInicioCard(Date.now());
-    setTempoDecorridoSegundos(0);
+    tempoInicioCardRef.current = Date.now();
     setMostrarVerso(false);
     setRespostaSelecionada(null);
     setMascarasReveladas({});
     setClozesRevelados({});
     setBlocosFluxoRevelados({});
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+    }
   }, [indiceAtual]);
-
-  // Cronômetro progressivo em tempo real por questão
-  useEffect(() => {
-    if (sessaoFinalizada) return;
-    const interval = setInterval(() => {
-      setTempoDecorridoSegundos(prev => prev + 1);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [indiceAtual, sessaoFinalizada]);
 
   // Interações de Oclusão de Imagem
   const toggleMascaraOclusao = (mascaraId: string) => {
@@ -253,13 +306,11 @@ export const ReviewSessionModal: React.FC<ReviewSessionModalProps> = ({
   };
 
   const revelarTodosClozes = () => {
-    // FIX #4: usa a contagem real de clozes ao invés do limite fixo de 20
     const all: Record<number, boolean> = {};
     if (cardAtual?.textoCloze) {
       const matches = Array.from(cardAtual.textoCloze.matchAll(/\{\{c(\d+)::/g));
       matches.forEach(m => { all[parseInt(m[1], 10)] = true; });
     }
-    // fallback: se não houver textoCloze, garante índices 1-20 (compatibilidade)
     if (Object.keys(all).length === 0) {
       for (let i = 1; i <= 20; i++) all[i] = true;
     }
@@ -267,21 +318,29 @@ export const ReviewSessionModal: React.FC<ReviewSessionModalProps> = ({
     setMostrarVerso(true);
   };
 
-  // Interações de Fluxograma / Algoritmo de Decisão
+  // Lista unificada e retrocompatível de passos (Passo 1 até o fim, todos iniciando ocluídos)
+  const passosNormalizados = useMemo(
+    () => (cardAtual ? obterPassosNormalizados(cardAtual) : []),
+    [cardAtual]
+  );
+
+  // Interações de Passo a Passo Sequencial
   const toggleBlocoFluxo = (blocoId: string) => {
     setBlocosFluxoRevelados(prev => {
-      const novo = { ...prev, [blocoId]: !prev[blocoId] };
-      if (!prev[blocoId]) {
-        const blocos = (cardAtual?.algoritmoDecisao?.blocos && Array.isArray(cardAtual.algoritmoDecisao.blocos))
-          ? cardAtual.algoritmoDecisao.blocos
-          : (cardAtual?.blocosOclusao && Array.isArray(cardAtual.blocosOclusao))
-            ? cardAtual.blocosOclusao
-            : (cardAtual?.etapasFluxograma && Array.isArray(cardAtual.etapasFluxograma))
-              ? cardAtual.etapasFluxograma
-              : [];
-        if (blocos.length > 0 && blocos.every(b => b?.id && novo[b.id])) {
-          setMostrarVerso(true);
-        }
+      const estadoAtual = prev[blocoId] || mostrarVerso;
+      const novo = { ...prev };
+      if (mostrarVerso) {
+        // Se estava tudo revelado por mostrarVerso, reconstrói o mapa mantendo os outros visíveis e ocultando este
+        passosNormalizados.forEach(p => {
+          novo[p.id] = p.id !== blocoId;
+        });
+        setMostrarVerso(false);
+        return novo;
+      }
+
+      novo[blocoId] = !estadoAtual;
+      if (!estadoAtual && passosNormalizados.length > 0 && passosNormalizados.every(p => novo[p.id])) {
+        setMostrarVerso(true);
       }
       return novo;
     });
@@ -289,30 +348,24 @@ export const ReviewSessionModal: React.FC<ReviewSessionModalProps> = ({
 
   const revelarTodosBlocosFluxo = () => {
     const all: Record<string, boolean> = {};
-    if (cardAtual?.algoritmoDecisao?.blocos && Array.isArray(cardAtual.algoritmoDecisao.blocos)) {
-      cardAtual.algoritmoDecisao.blocos.forEach(b => { if (b?.id) all[b.id] = true; });
-    }
-    if (cardAtual?.blocosOclusao && Array.isArray(cardAtual.blocosOclusao)) {
-      cardAtual.blocosOclusao.forEach(b => { if (b?.id) all[b.id] = true; });
-    }
-    if (cardAtual?.etapasFluxograma && Array.isArray(cardAtual.etapasFluxograma)) {
-      cardAtual.etapasFluxograma.forEach(b => { if (b?.id) all[b.id] = true; });
-    }
+    passosNormalizados.forEach(p => {
+      all[p.id] = true;
+    });
     setBlocosFluxoRevelados(all);
     setMostrarVerso(true);
   };
 
+  const ocultarTodosBlocosFluxo = () => {
+    setBlocosFluxoRevelados({});
+    setMostrarVerso(false);
+  };
+
   const revelarProximoBlocoFluxo = () => {
-    const blocos = (cardAtual?.algoritmoDecisao?.blocos && Array.isArray(cardAtual.algoritmoDecisao.blocos))
-      ? cardAtual.algoritmoDecisao.blocos
-      : (cardAtual?.blocosOclusao && Array.isArray(cardAtual.blocosOclusao))
-        ? cardAtual.blocosOclusao
-        : (cardAtual?.etapasFluxograma && Array.isArray(cardAtual.etapasFluxograma))
-          ? cardAtual.etapasFluxograma
-          : [];
-    const proximo = blocos.find(b => b?.id && !blocosFluxoRevelados[b.id]);
-    if (proximo?.id) {
+    const proximo = passosNormalizados.find(p => !blocosFluxoRevelados[p.id] && !mostrarVerso);
+    if (proximo) {
       toggleBlocoFluxo(proximo.id);
+    } else {
+      revelarTodosBlocosFluxo();
     }
   };
 
@@ -323,12 +376,13 @@ export const ReviewSessionModal: React.FC<ReviewSessionModalProps> = ({
     setMostrarVerso(true);
   };
 
-  // Resposta SRS
+  // Resposta SRS com transição visual instantânea (<16ms no celular)
   const responder = (avaliacao: 'errei' | 'dificil' | 'bom' | 'facil') => {
     if (!cardAtual) return;
 
-    const tempoGasto = Math.max(1, Math.round((Date.now() - tempoInicioCard) / 1000));
-    onRegistrarRevisao(cardAtual.id, avaliacao, tempoGasto, modoAtivo);
+    const cardId = cardAtual.id;
+    const modoParaSalvar = modoAtivo;
+    const tempoGasto = Math.max(1, Math.round((Date.now() - tempoInicioCardRef.current) / 1000));
 
     setEstatisticasSessao(prev => ({
       ...prev,
@@ -336,62 +390,80 @@ export const ReviewSessionModal: React.FC<ReviewSessionModalProps> = ({
       totalSegundos: prev.totalSegundos + tempoGasto,
     }));
 
-    // Re-enfileiramento com ciclo de repetição SOMENTE no Modo Revisão!
-    // No Modo Estudo (1ª vez fazendo o card), NÃO há repetições na sessão.
+    // Re-enfileiramento com ciclo de repetição SOMENTE no Modo Revisão
     const MAX_REENQUEUE = 2;
     let reEnqueued = false;
     if (modoAtivo === 'revisao' && avaliacao === 'errei' && filaCards.length > 1) {
-      const count = reEnqueueCountRef.current![cardAtual.id] || 0;
+      const count = reEnqueueCountRef.current[cardId] || 0;
       if (count < MAX_REENQUEUE) {
-        reEnqueueCountRef.current![cardAtual.id] = count + 1;
+        reEnqueueCountRef.current[cardId] = count + 1;
         setFilaCards(prev => [...prev, cardAtual]);
         reEnqueued = true;
       }
     }
 
+    // 1. Atualiza o card na tela IMEDIATAMENTE antes da gravação no storage
     if (indiceAtual + 1 < filaCards.length + (reEnqueued ? 1 : 0)) {
+      setMostrarVerso(false);
+      setRespostaSelecionada(null);
       setIndiceAtual(prev => prev + 1);
     } else {
-      // Concluiu todos os cards
       setSessaoFinalizada(true);
       try {
         confetti({
-          particleCount: 80,
-          spread: 70,
+          particleCount: 70,
+          spread: 65,
           origin: { y: 0.6 },
         });
       } catch (e) {
         // Fallback caso canvas não esteja disponível
       }
     }
+
+    // 2. Persiste revisão no próximo frame livre para zero travamento ao toque
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        onRegistrarRevisao(cardId, avaliacao, tempoGasto, modoParaSalvar);
+      }, 0);
+    });
   };
 
   const handleVoltarCard = () => {
     if (indiceAtual > 0) {
+      setMostrarVerso(false);
+      setRespostaSelecionada(null);
       setIndiceAtual(prev => prev - 1);
     }
   };
 
   const handlePularCard = () => {
-    // Se a resposta já foi visualizada no Modo Estudo, registra como estudado para não perder o progresso
-    if (mostrarVerso && cardAtual && modoAtivo === 'estudo') {
-      const tempoGasto = Math.max(1, Math.round((Date.now() - tempoInicioCard) / 1000));
-      onRegistrarRevisao(cardAtual.id, 'bom', tempoGasto, 'estudo');
-    }
+    const deveRegistrarEstudo = mostrarVerso && cardAtual && modoAtivo === 'estudo';
+    const cardId = cardAtual?.id;
+    const tempoGasto = Math.max(1, Math.round((Date.now() - tempoInicioCardRef.current) / 1000));
 
     if (indiceAtual + 1 < filaCards.length) {
+      setMostrarVerso(false);
+      setRespostaSelecionada(null);
       setIndiceAtual(prev => prev + 1);
     } else {
       setSessaoFinalizada(true);
       try {
         confetti({
-          particleCount: 80,
-          spread: 70,
+          particleCount: 70,
+          spread: 65,
           origin: { y: 0.6 },
         });
       } catch (e) {
         // Fallback
       }
+    }
+
+    if (deveRegistrarEstudo && cardId) {
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          onRegistrarRevisao(cardId, 'bom', tempoGasto, 'estudo');
+        }, 0);
+      });
     }
   };
 
@@ -419,7 +491,11 @@ export const ReviewSessionModal: React.FC<ReviewSessionModalProps> = ({
 
       if (e.code === 'Space') {
         e.preventDefault();
-        setMostrarVerso(prev => !prev);
+        if (!mostrarVerso && passosNormalizados.length > 0 && (cardAtual?.tipoCard === 'fluxograma_oclusao' || !!cardAtual?.algoritmoDecisao)) {
+          revelarProximoBlocoFluxo();
+        } else {
+          setMostrarVerso(prev => !prev);
+        }
       } else if (mostrarVerso || respostaSelecionada !== null) {
         if (e.key === '1') responder('errei');
         else if (e.key === '2') responder('dificil');
@@ -430,17 +506,12 @@ export const ReviewSessionModal: React.FC<ReviewSessionModalProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [mostrarVerso, respostaSelecionada, indiceAtual, sessaoFinalizada, filaCards.length, isQuickEditOpen]);
-
-  const formatarTempo = (segundos: number) => {
-    const mins = Math.floor(segundos / 60);
-    const secs = segundos % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
+  }, [mostrarVerso, respostaSelecionada, indiceAtual, sessaoFinalizada, filaCards.length, isQuickEditOpen, passosNormalizados, blocosFluxoRevelados, cardAtual]);
 
   if (!cardAtual && !sessaoFinalizada) {
     return null;
   }
+
 
   // =========================================================================
   // TELA DE CONCLUSÃO DA SESSÃO
@@ -513,106 +584,90 @@ export const ReviewSessionModal: React.FC<ReviewSessionModalProps> = ({
   const isFluxogramaComplexo = cardAtual?.tipoCard === 'fluxograma_complexo' || !!cardAtual?.fluxogramaComplexo;
   const isFluxograma = !isFluxogramaComplexo && (cardAtual?.tipoCard === 'fluxograma_oclusao' || (cardAtual as any)?.tipoCard === 'fluxograma' || !!cardAtual?.algoritmoDecisao || (cardAtual?.blocosOclusao && cardAtual.blocosOclusao.length > 0) || (cardAtual?.etapasFluxograma && cardAtual.etapasFluxograma.length > 0));
 
-  // =========================================================================
-  // RESOLUÇÃO IMERSIVA DEDICADA PARA FLUXOGRAMA COMPLEXO (TELA CHEIA TOTAL)
-  // O usuário navega pela árvore visual personalizada, com blocos ocluídos
-  // exceto o primeiro, clicando diretamente nas caixas para revelar.
-  // =========================================================================
-  if (isFluxogramaComplexo && cardAtual) {
-    const complexData: FluxogramaComplexoDados = cardAtual.fluxogramaComplexo || {
-      id: cardAtual.id,
-      titulo: cardAtual.titulo,
-      descricao: cardAtual.perolaClinica,
-      noInicialId: 'no-1',
-      nos: [
-        {
-          id: 'no-1',
-          titulo: cardAtual.perguntaGatilho || cardAtual.titulo,
-          descricao: cardAtual.resposta,
-          tipo: 'inicio',
-          posicaoX: 450,
-          posicaoY: 100,
-          ramos: []
-        }
-      ]
-    };
-
-    return (
-      <ComplexFlowchartViewer
-        fluxograma={complexData}
-        initialFullScreen={true}
-        onAvaliarRevisao={responder}
-        onClose={onClose}
-        tituloContexto={cardAtual.titulo}
-        perolaClinica={cardAtual.perolaClinica}
-        perguntaGatilho={cardAtual.perguntaGatilho || (cardAtual as any).pergunta}
-        tempoDecorridoSegundos={tempoDecorridoSegundos}
-        progressoTexto={totalCards > 1 ? `${modoAtivo === 'estudo' ? 'Estudo' : 'Revisão'} ${indiceAtual + 1}/${totalCards}` : `${modoAtivo === 'estudo' ? 'Estudo' : 'Revisão'} 1/1`}
-        badgeEspecialidade={cardAtual.especialidade}
-        card={cardAtual}
-        onEditarCard={onEditarCard}
-        onVoltarCard={handleVoltarCard}
-        onPularCard={handlePularCard}
-        canVoltar={indiceAtual > 0}
-      />
-    );
-  }
+  const progressoPercentual = totalCards > 0 ? Math.min(100, Math.round(((indiceAtual + 1) / totalCards) * 100)) : 100;
 
   // =========================================================================
-  // TELA DEDICADA PADRÃO UNIFICADA (VISUALIZAÇÃO DE PROVAS & QUESTÕES MÉDICAS)
+  // TELA DEDICADA PADRÃO UNIFICADA (ESTÉTICA MINIMALISTA & LEITURA CONFORTÁVEL)
   // =========================================================================
   return (
-    <div className="fixed inset-0 z-50 bg-slate-100/90 backdrop-blur-xs overflow-y-auto min-h-screen text-left flex flex-col justify-start touch-pan-y overscroll-y-contain">
-      <div className="w-full max-w-2xl mx-auto px-1.5 sm:px-4 py-2 sm:py-3 space-y-2 flex-1 flex flex-col pb-[max(2.5rem,env(safe-area-inset-bottom))] animate-in fade-in duration-150">
+    <div
+      ref={scrollContainerRef}
+      className={`fixed inset-0 z-50 overflow-y-auto min-h-screen text-left flex flex-col justify-start touch-pan-y overscroll-y-contain transition-colors duration-200 ${
+        confortoVisual ? 'bg-[#F2EFE9]' : 'bg-[#F7F7F5]'
+      }`}
+    >
+      <div className="w-full max-w-2xl mx-auto px-2 sm:px-4 pt-2 sm:pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] space-y-2 flex-1 flex flex-col">
         
-        {/* Barra Superior da Questão / Flashcard (Compacta, elegante e centralizada) */}
-        <div className="bg-white rounded-2xl px-2.5 sm:px-4 py-2 border border-slate-200/90 shadow-2xs flex items-center justify-between gap-2 shrink-0">
-          {/* Esquerda: 2 Setinhas de Navegação (Voltar / Pular) + Número da Questão + Eixo */}
+        {/* Barra Superior Minimalista */}
+        <div
+          className={`rounded-2xl px-2.5 sm:px-3.5 py-2 border flex items-center justify-between gap-1.5 shrink-0 transition-colors duration-200 ${
+            confortoVisual
+              ? 'bg-[#FAF8F5] border-[#E6E0D6] shadow-[0_1px_2px_rgba(0,0,0,0.02)]'
+              : 'bg-white border-zinc-200/80 shadow-[0_1px_2px_rgba(0,0,0,0.025)]'
+          }`}
+        >
+          {/* Esquerda: Navegação (Voltar / Pular) + Progresso + Eixo */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            {/* Bloco com as 2 Setinhas: Voltar (←) e Pular (→) */}
-            <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200/90 shadow-3xs shrink-0">
+            <div
+              className={`flex items-center p-0.5 rounded-xl border shrink-0 ${
+                confortoVisual ? 'bg-[#EFECE6] border-[#E2DDD3]' : 'bg-zinc-100/80 border-zinc-200/70'
+              }`}
+            >
               <button
                 type="button"
                 id="btn-nav-voltar-card"
                 onClick={handleVoltarCard}
                 disabled={indiceAtual === 0}
                 title={indiceAtual === 0 ? "Primeiro flashcard da sessão" : "Voltar ao flashcard anterior (←)"}
-                className={`p-1.5 rounded-lg flex items-center justify-center transition-all ${
+                className={`p-1.5 rounded-lg flex items-center justify-center touch-instant ${
                   indiceAtual === 0
-                    ? 'text-slate-300 cursor-not-allowed opacity-40'
-                    : 'text-slate-700 hover:text-blue-700 hover:bg-white active:scale-95 cursor-pointer shadow-3xs'
+                    ? 'text-zinc-300 cursor-not-allowed opacity-40'
+                    : 'text-zinc-700 hover:text-zinc-950 hover:bg-white cursor-pointer'
                 }`}
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
 
-              <div className="h-3.5 w-px bg-slate-200 mx-0.5" />
+              <div className="h-3.5 w-px bg-zinc-200/80 mx-0.5" />
 
               <button
                 type="button"
                 id="btn-nav-pular-card"
                 onClick={handlePularCard}
                 title={indiceAtual + 1 >= totalCards ? "Concluir sessão (→)" : "Pular este flashcard e ir ao próximo (→)"}
-                className="p-1.5 rounded-lg flex items-center justify-center text-slate-700 hover:text-blue-700 hover:bg-white active:scale-95 cursor-pointer transition-all shadow-3xs"
+                className="p-1.5 rounded-lg flex items-center justify-center text-zinc-700 hover:text-zinc-950 hover:bg-white cursor-pointer touch-instant"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
 
-            <span className="text-xs sm:text-sm font-black text-slate-900 whitespace-nowrap">
+            <span className="text-xs sm:text-[13px] font-bold text-zinc-800 tabular-nums whitespace-nowrap">
               {totalCards > 1 ? `${indiceAtual + 1}/${totalCards}` : '1/1'}
             </span>
             <EixoEmojiBadge card={cardAtual} size="sm" />
           </div>
 
-          {/* Direita: Cronômetro + Botão Editar (Ícone) + Botão Dica + Lixeira + X */}
+          {/* Direita: Cronômetro Isolado + Conforto Visual + Editar + Dica + Lixeira + Fechar */}
           <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-            <div className="flex items-center gap-1 text-[11px] font-mono font-bold text-slate-700 bg-slate-100 px-2 py-1 rounded-lg border border-slate-200 shadow-3xs">
-              <Clock className="w-3 h-3 text-slate-500" />
-              <span>{formatarTempo(tempoDecorridoSegundos)}</span>
-            </div>
+            <SessionTimerBadge
+              resetKey={indiceAtual}
+              paused={sessaoFinalizada}
+              comfortMode={confortoVisual}
+            />
 
-            <div className="h-3.5 w-px bg-slate-200 mx-0.5" />
+            {/* Modo Conforto Visual (Tom Papel Quente anti-cansaço visual) */}
+            <button
+              type="button"
+              onClick={handleToggleConfortoVisual}
+              title={confortoVisual ? "Modo Papel Quente ativo (toque para fundo claro padrão)" : "Ativar Modo Leitura Conforto (tom papel quente sem cansaço visual)"}
+              className={`p-1.5 rounded-lg border cursor-pointer touch-instant flex items-center justify-center ${
+                confortoVisual
+                  ? 'bg-amber-100/80 text-amber-900 border-amber-300/80'
+                  : 'bg-zinc-50 text-zinc-500 border-zinc-200/80 hover:bg-zinc-100 hover:text-zinc-800'
+              }`}
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+            </button>
 
             {/* Editar (Apenas Ícone) */}
             <button
@@ -626,9 +681,13 @@ export const ReviewSessionModal: React.FC<ReviewSessionModalProps> = ({
                 }
               }}
               title="Editar este flashcard"
-              className="p-1.5 rounded-lg border border-slate-200 hover:border-blue-400 bg-white hover:bg-blue-50/60 text-slate-700 hover:text-blue-700 transition-all cursor-pointer shadow-3xs active:scale-95 flex items-center justify-center"
+              className={`p-1.5 rounded-lg border cursor-pointer touch-instant flex items-center justify-center ${
+                confortoVisual
+                  ? 'bg-[#FAF8F5] border-[#E2DDD3] text-stone-700 hover:bg-white'
+                  : 'bg-white border-zinc-200/80 text-zinc-600 hover:text-blue-600 hover:border-blue-300'
+              }`}
             >
-              <FilePenLine className="w-3.5 h-3.5 text-blue-600" />
+              <FilePenLine className="w-3.5 h-3.5" />
             </button>
 
             {/* Dica (Ícone com status) */}
@@ -636,13 +695,13 @@ export const ReviewSessionModal: React.FC<ReviewSessionModalProps> = ({
               type="button"
               onClick={handleToggleExibirDicas}
               title={exibirDicas ? "Dicas ativadas (clique para ocultar)" : "Dicas ocultas (clique para exibir)"}
-              className={`p-1.5 rounded-lg border transition-all cursor-pointer shadow-3xs active:scale-95 flex items-center justify-center ${
+              className={`p-1.5 rounded-lg border cursor-pointer touch-instant flex items-center justify-center ${
                 exibirDicas
-                  ? 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100'
-                  : 'bg-slate-100 text-slate-400 border-slate-200 hover:bg-slate-200'
+                  ? 'bg-amber-50/90 text-amber-800 border-amber-200'
+                  : 'bg-zinc-50 text-zinc-400 border-zinc-200/80 hover:bg-zinc-100'
               }`}
             >
-              <Lightbulb className={`w-3.5 h-3.5 ${exibirDicas ? 'text-amber-500 fill-amber-400' : 'text-slate-400'}`} />
+              <Lightbulb className={`w-3.5 h-3.5 ${exibirDicas ? 'text-amber-500 fill-amber-400' : 'text-zinc-400'}`} />
             </button>
 
             {/* Lixeira (Excluir Card) */}
@@ -651,7 +710,11 @@ export const ReviewSessionModal: React.FC<ReviewSessionModalProps> = ({
               id="btn-excluir-card-sessao"
               onClick={() => setModalConfirmarExclusao(true)}
               title="Excluir este flashcard permanentemente"
-              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 transition-all cursor-pointer active:scale-95 shadow-3xs flex items-center justify-center bg-white"
+              className={`p-1.5 rounded-lg border cursor-pointer touch-instant flex items-center justify-center ${
+                confortoVisual
+                  ? 'bg-[#FAF8F5] border-[#E2DDD3] text-stone-400 hover:text-rose-600 hover:border-rose-200'
+                  : 'bg-white border-zinc-200/80 text-zinc-400 hover:text-rose-600 hover:bg-rose-50 hover:border-rose-200'
+              }`}
             >
               <Trash2 className="w-3.5 h-3.5" />
             </button>
@@ -661,799 +724,860 @@ export const ReviewSessionModal: React.FC<ReviewSessionModalProps> = ({
               type="button"
               onClick={onClose}
               title="Encerrar sessão"
-              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition-all cursor-pointer active:scale-95 flex items-center justify-center"
+              className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-800 hover:bg-zinc-100/80 border border-transparent cursor-pointer touch-instant flex items-center justify-center"
             >
-              <X className="w-4 h-4" strokeWidth={2.5} />
+              <X className="w-4 h-4" strokeWidth={2.2} />
             </button>
           </div>
         </div>
 
         {/* Card Principal da Questão / Flashcard */}
-        <div className="bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-5 border border-slate-200/80 shadow-2xs space-y-3.5 text-left flex-1 flex flex-col justify-between">
-          <div className="space-y-3.5">
-            {/* Título da Questão / Caso e Tópico com Tipografia Aprimorada e Alto Contraste */}
-            <div className="text-center space-y-2 pb-2.5 border-b border-slate-100">
-              <div className="flex items-center justify-center gap-2">
-                <h3 className="text-base sm:text-lg font-bold text-slate-900 leading-snug">
+        <div
+          key={`${cardAtual.id}-${indiceAtual}`}
+          className={`rounded-2xl sm:rounded-3xl border flex-1 flex flex-col justify-between overflow-hidden animate-card-reveal transition-colors duration-200 ${
+            confortoVisual
+              ? 'bg-[#FAF8F5] border-[#E6E0D6] shadow-[0_1px_3px_rgba(0,0,0,0.025)]'
+              : 'bg-white border-zinc-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.025)]'
+          }`}
+        >
+          {/* Barra de Progresso Minimalista de 2px no topo do card */}
+          <div className="w-full h-[2.5px] bg-zinc-100/80 overflow-hidden shrink-0">
+            <div
+              className="h-full bg-zinc-800 transition-transform duration-200 origin-left"
+              style={{ transform: `scaleX(${progressoPercentual / 100})` }}
+            />
+          </div>
+
+          <div className="p-3.5 sm:p-6 space-y-4 flex-1 flex flex-col justify-between">
+            <div className="space-y-4">
+              {/* Cabeçalho do Card: Tópico + Modo + Título */}
+              <div className="space-y-2 pb-3 border-b border-zinc-100">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  {cardAtual.topicoNome ? (
+                    <span
+                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium border ${
+                        confortoVisual
+                          ? 'bg-[#EFECE6] text-stone-700 border-[#E2DDD3]'
+                          : 'bg-zinc-100/80 text-zinc-600 border-zinc-200/60'
+                      }`}
+                    >
+                      {cardAtual.topicoNome.replace(/^tópico:\s*/i, '')}
+                    </span>
+                  ) : <span />}
+
+                  {/* Pill de Alternância: Modo Estudo vs Modo Revisão */}
+                  <button
+                    type="button"
+                    id="btn-toggle-modo-sessao"
+                    onClick={() => setModoAtivo(prev => prev === 'estudo' ? 'revisao' : 'estudo')}
+                    title={modoAtivo === 'estudo' 
+                      ? "Modo Estudo: cada card aparece uma única vez (sem repetições). Toque para alternar." 
+                      : "Modo Revisão: cards com erro voltam ao final da fila. Toque para alternar."}
+                    className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full border cursor-pointer touch-instant ${
+                      modoAtivo === 'estudo'
+                        ? 'bg-emerald-50/80 text-emerald-800 border-emerald-200/80'
+                        : 'bg-indigo-50/80 text-indigo-800 border-indigo-200/80'
+                    }`}
+                  >
+                    {modoAtivo === 'estudo' ? (
+                      <>
+                        <Sparkles className="w-3 h-3 text-emerald-600" />
+                        <span>Estudo (1ª vez)</span>
+                      </>
+                    ) : (
+                      <>
+                        <RotateCcw className="w-3 h-3 text-indigo-600" />
+                        <span>Revisão (Ciclo)</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                <h3 className="text-[15px] sm:text-[17px] font-semibold text-zinc-900 leading-snug tracking-tight text-left">
                   {cardAtual.titulo}
                 </h3>
               </div>
-              <div className="flex items-center justify-center gap-2 flex-wrap">
-                {cardAtual.topicoNome && (
-                  <div className="inline-block px-3 py-1 rounded-full bg-slate-100 text-slate-800 border border-slate-300/80 text-xs font-bold shadow-3xs">
-                    {cardAtual.topicoNome.replace(/^tópico:\s*/i, '')}
-                  </div>
-                )}
 
-                {/* Pill de Alternância: Modo Estudo (1ª vez / sem repetição) vs Modo Revisão (Ciclo ativo) */}
-                <button
-                  type="button"
-                  id="btn-toggle-modo-sessao"
-                  onClick={() => setModoAtivo(prev => prev === 'estudo' ? 'revisao' : 'estudo')}
-                  title={modoAtivo === 'estudo' 
-                    ? "Modo Estudo: cada card aparece uma única vez (sem repetições). Clique para alternar para Revisão com ciclo." 
-                    : "Modo Revisão: cards com erro voltam ao final da fila para consolidação. Clique para alternar para Estudo sem repetição."}
-                  className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full border transition-all cursor-pointer active:scale-95 shadow-3xs ${
-                    modoAtivo === 'estudo'
-                      ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
-                      : 'bg-indigo-50 text-indigo-800 border-indigo-300 hover:bg-indigo-100'
+            {/* =============================================================== */}
+            {/* FORMATO 1: CASO CLÍNICO COM MÚLTIPLA ESCOLHA                     */}
+            {/* =============================================================== */}
+            {isCaso && (
+              <div className="space-y-3.5 text-left">
+                {/* Vinheta Médica do Paciente (Editorial Clean) */}
+                <div
+                  className={`p-3.5 sm:p-4 rounded-2xl border space-y-2.5 text-left ${
+                    confortoVisual
+                      ? 'bg-[#F3EFE8] border-[#E4DECFE0]'
+                      : 'bg-zinc-50/80 border-zinc-200/70'
                   }`}
                 >
-                  {modoAtivo === 'estudo' ? (
-                    <>
-                      <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Modo Estudo (1ª vez)</span>
-                    </>
-                  ) : (
-                    <>
-                      <RotateCcw className="w-3.5 h-3.5 text-indigo-600" />
-                      <span>Modo Revisão (Ciclo)</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-
-          {/* =============================================================== */}
-          {/* FORMATO 1: CASO CLÍNICO COM MÚLTIPLA ESCOLHA                     */}
-          {/* =============================================================== */}
-          {isCaso && (
-            <div className="space-y-3 sm:space-y-3.5 text-left">
-              {/* Vinheta Médica do Paciente */}
-              <div className="bg-gradient-to-br from-blue-50/60 via-slate-50/80 to-indigo-50/30 p-3 sm:p-4 rounded-2xl border border-blue-100/90 space-y-2 shadow-3xs text-left">
-                <div className="flex items-center justify-between pb-1 border-b border-blue-100/60">
-                  <span className="text-[10px] sm:text-[10.5px] font-black tracking-wider uppercase text-blue-900 flex items-center gap-1.5">
-                    <Activity className="w-3.5 h-3.5 text-blue-600" />
-                    Quadro Clínico
-                  </span>
-                  <span className="text-[9.5px] text-blue-600 font-semibold">Cenário Real</span>
-                </div>
-
-                <p className="text-xs sm:text-[13px] text-slate-950 leading-relaxed font-medium text-left">
-                  {cardAtual.casoClinicoDados!.historiaClinica}
-                </p>
-
-                {cardAtual.casoClinicoDados!.exameFisicoSinais && (
-                  <div className="mt-1.5 p-2.5 bg-white/95 rounded-xl border border-blue-100/80 shadow-3xs text-left space-y-0.5">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-blue-950 flex items-center gap-1">
-                      🩺 Exame Físico & Sinais Vitais
+                  <div className="flex items-center justify-between pb-1.5 border-b border-zinc-200/60">
+                    <span className="text-[10.5px] font-bold tracking-wider uppercase text-zinc-600 flex items-center gap-1.5">
+                      <Activity className="w-3.5 h-3.5 text-blue-600" />
+                      Quadro Clínico
                     </span>
-                    <p className="text-xs sm:text-[12px] text-slate-700 font-normal leading-relaxed">
-                      {cardAtual.casoClinicoDados!.exameFisicoSinais}
-                    </p>
+                    <span className="text-[10px] text-zinc-400 font-medium">Cenário Prático</span>
                   </div>
-                )}
-              </div>
 
-              {/* Pergunta de Decisão com tipografia normal e legível idêntica ao quadro clínico */}
-              <div className="pt-0.5 text-xs sm:text-[13px] text-slate-700 leading-relaxed font-normal flex items-start gap-1.5 text-left">
-                <span className="text-blue-600 font-bold shrink-0 mt-0.5 select-none text-sm">➔</span>
-                <div className="flex-1">
-                  <FormattedClinicalText 
-                    text={extrairPerguntaObjetiva(
-                      cardAtual.perguntaGatilho,
-                      cardAtual.casoClinicoDados?.historiaClinica
-                    ) || 'Qual a conduta diagnóstica ou terapêutica imediata mais apropriada?'} 
-                  />
-                </div>
-              </div>
+                  <p className="text-[13.5px] sm:text-[14.5px] text-zinc-800 leading-[1.65] font-normal text-left">
+                    {cardAtual.casoClinicoDados!.historiaClinica}
+                  </p>
 
-              {/* Alternativas de Escolha Única */}
-              <div className="space-y-2">
-                {cardAtual.casoClinicoDados!.opcoes.map((opcao, idx) => {
-                  const letras = ['A', 'B', 'C', 'D', 'E'];
-                  const foiRespondido = respostaSelecionada !== null;
-                  const eCorreta = idx === cardAtual.casoClinicoDados!.indiceCorreto;
-                  const foiEscolhida = idx === respostaSelecionada;
-                  const textoLimpo = opcao.replace(/^[A-Ea-e][\)\.\-]\s*/, '');
-
-                  let styleClass = 'bg-white hover:bg-slate-50 border-slate-200/90 text-slate-900 shadow-3xs';
-                  if (foiRespondido) {
-                    if (eCorreta) {
-                      styleClass = 'bg-emerald-50/90 border-2 border-emerald-500 text-emerald-950 font-semibold shadow-2xs';
-                    } else if (foiEscolhida && !eCorreta) {
-                      styleClass = 'bg-rose-50/90 border-2 border-rose-400 text-rose-950 font-semibold shadow-2xs';
-                    } else {
-                      styleClass = 'bg-slate-50/60 border-slate-200/40 text-slate-400 opacity-50';
-                    }
-                  }
-
-                  return (
-                    <button
-                      key={idx}
-                      disabled={foiRespondido}
-                      onClick={() => handleSelecionarAlternativa(idx)}
-                      className={`w-full p-2.5 sm:p-3 rounded-xl sm:rounded-2xl border text-left text-xs sm:text-[13px] transition-all duration-100 ease-out flex items-start gap-2.5 cursor-pointer ${styleClass} ${
-                        !foiRespondido ? 'active:scale-[0.99]' : ''
+                  {cardAtual.casoClinicoDados!.exameFisicoSinais && (
+                    <div
+                      className={`mt-2 p-3 rounded-xl border text-left space-y-1 ${
+                        confortoVisual
+                          ? 'bg-[#FAF8F5] border-[#E4DECF]'
+                          : 'bg-white border-zinc-200/70'
                       }`}
                     >
-                      <span className={`w-6 h-6 sm:w-7 sm:h-7 rounded-lg sm:rounded-xl font-bold flex items-center justify-center shrink-0 text-xs transition-all mt-0.5 ${
-                        foiRespondido && eCorreta 
-                          ? 'bg-emerald-600 text-white shadow-2xs' 
-                          : foiRespondido && foiEscolhida 
-                            ? 'bg-rose-600 text-white shadow-2xs' 
-                            : 'bg-slate-100 text-slate-700 border border-slate-200'
-                      }`}>
-                        {foiRespondido && eCorreta ? (
-                          <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" strokeWidth={2.2} />
-                        ) : foiRespondido && foiEscolhida ? (
-                          <XCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" strokeWidth={2.2} />
-                        ) : (
-                          letras[idx]
-                        )}
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-600 flex items-center gap-1">
+                        🩺 Exame Físico & Sinais Vitais
                       </span>
-                      <span className="flex-1 leading-relaxed pt-0.5 font-medium">
-                        <FormattedClinicalText text={textoLimpo} />
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {respostaSelecionada !== null && (
-                <div className="p-3 sm:p-4 rounded-2xl bg-emerald-50/60 border border-emerald-300 text-slate-950 space-y-2 animate-in fade-in text-left">
-                  <div className="flex items-center justify-between pb-1 border-b border-black/5">
-                    <div className="flex items-center gap-1.5 text-emerald-950 font-bold text-xs">
-                      <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Gabarito & Justificativa Detalhada:</span>
+                      <p className="text-[13px] sm:text-[13.5px] text-zinc-700 font-normal leading-[1.6]">
+                        {cardAtual.casoClinicoDados!.exameFisicoSinais}
+                      </p>
                     </div>
-                    <span className="text-[11px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900">
-                      Gabarito: {['A', 'B', 'C', 'D', 'E'][cardAtual.casoClinicoDados!.indiceCorreto]}
-                    </span>
-                  </div>
-                  <div className="text-slate-950 text-xs sm:text-[13px] leading-relaxed font-medium">
-                    <FormattedClinicalText text={cardAtual.casoClinicoDados!.justificativaDetalhada} />
+                  )}
+                </div>
+
+                {/* Pergunta de Decisão */}
+                <div className="pt-0.5 text-[13.5px] sm:text-[14.5px] text-zinc-800 leading-[1.65] font-medium flex items-start gap-2 text-left">
+                  <span className="text-zinc-400 font-semibold shrink-0 mt-0.5 select-none text-sm">➔</span>
+                  <div className="flex-1">
+                    <FormattedClinicalText 
+                      text={extrairPerguntaObjetiva(
+                        cardAtual.perguntaGatilho,
+                        cardAtual.casoClinicoDados?.historiaClinica
+                      ) || 'Qual a conduta diagnóstica ou terapêutica imediata mais apropriada?'} 
+                    />
                   </div>
                 </div>
-              )}
-            </div>
-          )}
 
-          {/* =============================================================== */}
-          {/* FORMATO 2: OCLUSÃO DE IMAGEM (SVG POLÍGONOS + RETÂNGULOS)        */}
-          {/* =============================================================== */}
-          {isImageOcclusion && (
-            <div className="space-y-2.5">
-              <p className="text-[11px] font-semibold text-slate-800">
-                {cardAtual.perguntaGatilho || 'Identifique as estruturas ocluídas na imagem:'}
-              </p>
+                {/* Alternativas de Escolha Única */}
+                <div className="space-y-2">
+                  {cardAtual.casoClinicoDados!.opcoes.map((opcao, idx) => {
+                    const letras = ['A', 'B', 'C', 'D', 'E'];
+                    const foiRespondido = respostaSelecionada !== null;
+                    const eCorreta = idx === cardAtual.casoClinicoDados!.indiceCorreto;
+                    const foiEscolhida = idx === respostaSelecionada;
+                    const textoLimpo = opcao.replace(/^[A-Ea-e][\)\.\-]\s*/, '');
 
-              <div className="relative w-full rounded-2xl overflow-hidden border border-slate-300 dark:border-slate-800 bg-slate-950 flex items-center justify-center p-1 sm:p-2 select-none shadow-inner">
-                <div 
-                  className="relative inline-block max-w-full select-none"
-                  style={{ lineHeight: 0 }}
-                >
-                  <img
-                    src={cardAtual.imagemUrl}
-                    alt={cardAtual.titulo}
-                    className="block max-w-full h-auto max-h-[60vh] sm:max-h-[480px] w-auto mx-auto select-none pointer-events-none"
-                    referrerPolicy="no-referrer"
-                  />
-
-                  {/* Camada SVG para Máscaras Livres com Polígonos */}
-                  <svg 
-                    className="absolute inset-0 w-full h-full pointer-events-none" 
-                    viewBox="0 0 100 100" 
-                    preserveAspectRatio="none"
-                  >
-                    {(cardAtual.mascarasImagem || [])
-                      .filter(m => m.tipoForma === 'livre' && m.pontos && m.pontos.length > 2)
-                      .map((m) => {
-                        const revelado = mascarasReveladas[m.id];
-                        const pontosString = m.pontos!.map(p => `${p.x},${p.y}`).join(' ');
-
-                        return (
-                          <g
-                            key={m.id}
-                            className="pointer-events-auto cursor-pointer"
-                            onClick={() => toggleMascaraOclusao(m.id)}
-                          >
-                            <polygon
-                              points={pontosString}
-                              fill={revelado ? 'transparent' : '#4f46e5'}
-                              fillOpacity={revelado ? 0 : 1}
-                              stroke={revelado ? 'rgba(16, 185, 129, 0.7)' : '#c7d2fe'}
-                              strokeWidth={revelado ? '1' : '1.2'}
-                              strokeDasharray={revelado ? '2,2' : undefined}
-                              className="transition-all hover:brightness-110 active:scale-98"
-                            />
-                            {!revelado && (
-                              <text
-                                x={m.x + m.largura / 2}
-                                y={m.y + m.altura / 2}
-                                textAnchor="middle"
-                                dominantBaseline="middle"
-                                fill="#ffffff"
-                                fontSize="3.8"
-                                fontWeight="bold"
-                                className="select-none pointer-events-none drop-shadow-sm"
-                              >
-                                [ #{m.numero} ]
-                              </text>
-                            )}
-                          </g>
-                        );
-                      })}
-                  </svg>
-
-                  {/* Máscaras Retangulares */}
-                  {(cardAtual.mascarasImagem || [])
-                    .filter(m => m.tipoForma !== 'livre' || !m.pontos || m.pontos.length <= 2)
-                    .map((m) => {
-                      const revelado = mascarasReveladas[m.id];
-
-                      return (
-                        <div
-                          key={m.id}
-                          onClick={() => toggleMascaraOclusao(m.id)}
-                          className={`absolute rounded-md transition-all flex items-center justify-center text-center p-1 text-xs cursor-pointer select-none active:scale-95 ${
-                            revelado
-                              ? 'bg-transparent border-2 border-dashed border-emerald-500/70 hover:bg-emerald-500/10'
-                              : 'bg-indigo-600 hover:bg-indigo-500 text-white font-bold border border-indigo-300 shadow-md hover:scale-[1.02] opacity-100'
-                          }`}
-                          style={{
-                            left: `${m.x}%`,
-                            top: `${m.y}%`,
-                            width: `${m.largura}%`,
-                            height: `${m.altura}%`,
-                            opacity: revelado ? undefined : 1,
-                          }}
-                          title={revelado ? `Estrutura revelada: ${m.textoOculto} (toque para ocultar)` : `Toque para revelar estrutura #${m.numero}`}
-                        >
-                          {!revelado && (
-                            <span className="text-[10px] font-black bg-white/20 px-1 py-0.2 rounded-sm">
-                              #{m.numero}
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })}
-                </div>
-              </div>
-
-              {/* Botões de Ação e Status */}
-              <div className="flex items-center justify-between gap-2">
-                <button
-                  onClick={revelarTodasMascaras}
-                  className="text-[10px] font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer transition-colors"
-                >
-                  <Eye className="w-3.5 h-3.5" />
-                  <span>Revelar Todas as Estruturas</span>
-                </button>
-                <span className="text-[10px] text-slate-400 font-medium">
-                  Toque na oclusão ou no quadrado abaixo para revelar
-                </span>
-              </div>
-
-              {/* Quadrados a parte com os nomes/respostas de cada estrutura abaixo da imagem */}
-              {(cardAtual.mascarasImagem || []).length > 0 && (
-                <div className="space-y-1.5 pt-1">
-                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
-                    <span>Gabarito das Estruturas (Toque para revelar individualmente):</span>
-                    <span className="text-[9px] font-semibold text-slate-400">
-                      {(cardAtual.mascarasImagem || []).filter(m => mascarasReveladas[m.id]).length} de {(cardAtual.mascarasImagem || []).length} revelados
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                    {(cardAtual.mascarasImagem || []).map((m) => {
-                      const revelado = mascarasReveladas[m.id];
-                      return (
-                        <button
-                          key={m.id}
-                          type="button"
-                          onClick={() => toggleMascaraOclusao(m.id)}
-                          className={`w-full p-2 rounded-xl border text-left flex items-center gap-2 transition-all cursor-pointer select-none active:scale-[0.98] ${
-                            revelado
-                              ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950 shadow-2xs'
-                              : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-600 hover:border-slate-300'
-                          }`}
-                        >
-                          <span
-                            className={`shrink-0 w-6 h-6 rounded-lg text-[10px] font-black flex items-center justify-center transition-colors ${
-                              revelado
-                                ? 'bg-emerald-600 text-white shadow-2xs'
-                                : 'bg-slate-200 text-slate-700'
-                            }`}
-                          >
-                            #{m.numero}
-                          </span>
-                          <div className="flex-1 min-w-0">
-                            {revelado ? (
-                              <div className="text-xs sm:text-[13px] leading-snug break-words">
-                                <FormattedClinicalText text={m.textoOculto} />
-                              </div>
-                            ) : (
-                              <span className="text-[11px] font-semibold text-slate-400 italic">
-                                [ Toque para revelar resposta #{m.numero} ]
-                              </span>
-                            )}
-                            {exibirDicas && m.dica && (
-                              <span className="text-[9px] text-slate-400 block truncate mt-0.5">
-                                Dica: {m.dica}
-                              </span>
-                            )}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* =============================================================== */}
-          {/* FORMATO 3A: FLUXOGRAMA COMPLEXO (ÁRVORE DE DECISÃO RAMIFICADA)   */}
-          {/* =============================================================== */}
-          {isFluxogramaComplexo && (
-            <div className="space-y-2.5 -mx-2 sm:-mx-4">
-              {cardAtual.perguntaGatilho && (
-                <p className="text-[11px] font-semibold text-slate-800 px-2 sm:px-4">
-                  {cardAtual.perguntaGatilho}
-                </p>
-              )}
-
-              <ComplexFlowchartViewer
-                fluxograma={cardAtual.fluxogramaComplexo || {
-                  id: cardAtual.id,
-                  titulo: cardAtual.titulo,
-                  descricao: cardAtual.perolaClinica,
-                  noInicialId: 'no-1',
-                  nos: [
-                    {
-                      id: 'no-1',
-                      titulo: cardAtual.perguntaGatilho || cardAtual.titulo,
-                      descricao: cardAtual.resposta,
-                      tipo: 'inicio',
-                      ramos: []
+                    let styleClass = confortoVisual
+                      ? 'bg-[#FAF8F5] hover:bg-[#F3EFE8] border-[#E2DDD3] text-zinc-800'
+                      : 'bg-white hover:bg-zinc-50/80 border-zinc-200/85 text-zinc-800';
+                    if (foiRespondido) {
+                      if (eCorreta) {
+                        styleClass = 'bg-emerald-50/85 border-emerald-400 text-emerald-950 font-medium';
+                      } else if (foiEscolhida && !eCorreta) {
+                        styleClass = 'bg-rose-50/85 border-rose-300 text-rose-950 font-medium';
+                      } else {
+                        styleClass = 'bg-zinc-50/40 border-zinc-200/40 text-zinc-400 opacity-55';
+                      }
                     }
-                  ]
-                }}
-                onRegistrarConclusao={() => setMostrarVerso(true)}
-              />
-            </div>
-          )}
-
-          {/* =============================================================== */}
-          {/* FORMATO 3B: FLUXOGRAMA & ALGORITMO DE DECISÃO PASSO A PASSO      */}
-          {/* =============================================================== */}
-          {isFluxograma && (
-            <div className="space-y-2.5">
-              <p className="text-[11px] font-semibold text-slate-800">
-                {cardAtual.perguntaGatilho || 'Identifique as etapas e condutas do algoritmo clínico:'}
-              </p>
-
-              {cardAtual.algoritmoDecisao && Array.isArray(cardAtual.algoritmoDecisao.blocos) && cardAtual.algoritmoDecisao.blocos.length > 0 ? (
-                <div className="p-3 bg-slate-50/80 rounded-2xl border border-slate-200/80 space-y-2">
-                  <div className="flex items-center justify-between pb-2 border-b border-slate-200/60">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-700 flex items-center gap-1.5">
-                      <GitFork className="w-4 h-4" />
-                      <span>{cardAtual.algoritmoDecisao.titulo || 'Algoritmo de Conduta'}</span>
-                    </span>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={revelarProximoBlocoFluxo}
-                        className="text-[10px] font-bold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg cursor-pointer transition-all active:scale-95 shadow-3xs"
-                      >
-                        + Próximo Passo
-                      </button>
-                      <button
-                        type="button"
-                        onClick={revelarTodosBlocosFluxo}
-                        className="text-[10px] font-bold text-indigo-700 hover:text-indigo-900 bg-white hover:bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-lg cursor-pointer transition-all active:scale-95 shadow-3xs"
-                      >
-                        Revelar Tudo
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2 pt-1">
-                    {cardAtual.algoritmoDecisao.blocos.map((bloco, idx) => {
-                      const revelado = blocosFluxoRevelados[bloco.id] || mostrarVerso;
-                      const ramificacao = (cardAtual.algoritmoDecisao?.ramificacoes || []).find(r => r?.destinoId === bloco.id);
-
-                      return (
-                        <div key={bloco.id || `bloco-${idx}`} className="space-y-1">
-                          {idx > 0 && (
-                            <div className="flex items-center justify-center py-1 select-none">
-                              <div className="flex items-center gap-1.5 text-indigo-500 bg-indigo-50/60 px-2 py-0.5 rounded-full border border-indigo-200/50">
-                                <ArrowDown className="w-3.5 h-3.5 stroke-[2.5]" />
-                                {ramificacao?.criterioCondicional && ramificacao.criterioCondicional.trim() ? (
-                                  <span className="text-[9.5px] font-bold text-indigo-900">
-                                    {ramificacao.criterioCondicional}
-                                  </span>
-                                ) : (
-                                  <span className="text-[9px] font-bold text-indigo-600 uppercase tracking-wider">
-                                    Próxima Etapa
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          )}
-
-                          <div
-                            onClick={() => toggleBlocoFluxo(bloco.id)}
-                            className={`p-3 rounded-2xl border text-left transition-all cursor-pointer select-none active:scale-[0.99] ${
-                              bloco.tipo === 'inicio'
-                                ? 'bg-blue-50/80 border-blue-200 text-blue-950 shadow-2xs'
-                                : revelado
-                                  ? 'bg-white border-emerald-300 shadow-2xs'
-                                  : 'bg-indigo-600 border-indigo-700 text-white shadow-xs hover:bg-indigo-500'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between gap-1.5 mb-1">
-                              <span className={`text-[9.5px] font-bold uppercase tracking-wider ${
-                                bloco.tipo === 'inicio' 
-                                  ? 'text-blue-600' 
-                                  : revelado 
-                                    ? 'text-emerald-700' 
-                                    : 'text-indigo-200'
-                              }`}>
-                                Etapa #{idx + 1} • {(bloco.tipo || 'conduta').toUpperCase()}
-                              </span>
-                              {bloco.tipo !== 'inicio' && (
-                                <span className="text-[9.5px] opacity-80 font-medium">
-                                  {revelado ? 'Toque p/ ocultar' : 'Toque p/ revelar'}
-                                </span>
-                              )}
-                            </div>
-
-                            <div className="mt-1">
-                              {bloco.tipo === 'inicio' || revelado ? (
-                                <div className="space-y-1.5">
-                                  <p className="text-xs sm:text-sm font-bold text-slate-900 leading-snug">
-                                    {bloco.titulo}
-                                  </p>
-                                  {bloco.descricao && (
-                                    <div className="pt-1.5 border-t border-slate-100/90 text-xs sm:text-[13px] text-slate-700 font-normal leading-relaxed">
-                                      <FormattedClinicalText text={(bloco.descricao || '').replace(/^\[.*?\]:\s*/, '')} />
-                                    </div>
-                                  )}
-                                </div>
-                              ) : (
-                                <div className="space-y-1 py-0.5">
-                                  <p className="text-xs sm:text-sm font-bold text-white/95 leading-snug">
-                                    {bloco.titulo}
-                                  </p>
-                                  <div className="flex items-center gap-2 pt-0.5">
-                                    <span className="w-2 h-2 rounded-full bg-indigo-300 animate-pulse" />
-                                    <span className="text-xs font-bold text-indigo-100 tracking-wide">
-                                      [ Resposta Oculta - Toque para Revelar ]
-                                    </span>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ) : cardAtual.etapasFluxograma && Array.isArray(cardAtual.etapasFluxograma) && cardAtual.etapasFluxograma.length > 0 ? (
-                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2">
-                  <div className="flex items-center justify-between pb-1 border-b border-slate-200/60">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-700">
-                      Etapas do Fluxo Clínico
-                    </span>
-                    <button
-                      onClick={revelarTodosBlocosFluxo}
-                      className="text-[9.5px] font-bold text-indigo-600 hover:text-indigo-800 px-2 py-0.5 rounded bg-white border border-slate-200 cursor-pointer"
-                    >
-                      Revelar Todos
-                    </button>
-                  </div>
-
-                  <div className="space-y-1.5 pt-1">
-                    {cardAtual.etapasFluxograma.map((etapa, idx) => {
-                      const revelado = blocosFluxoRevelados[etapa.id] || mostrarVerso;
-                      return (
-                        <div
-                          key={etapa.id || `etapa-${idx}`}
-                          onClick={() => toggleBlocoFluxo(etapa.id)}
-                          className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer select-none active:scale-[0.99] ${
-                            revelado
-                              ? 'bg-white border-emerald-300 shadow-2xs'
-                              : 'bg-indigo-600 border-indigo-700 text-white shadow-xs hover:bg-indigo-500'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className={`text-[9px] font-bold uppercase ${revelado ? 'text-emerald-700' : 'text-indigo-200'}`}>
-                              Etapa #{idx + 1} {etapa.titulo && `• ${etapa.titulo}`} {etapa.dica && `(${etapa.dica})`}
-                            </span>
-                            <span className="text-[9px] opacity-80">
-                              {revelado ? 'Toque p/ ocultar' : 'Toque p/ revelar'}
-                            </span>
-                          </div>
-                          <div className="mt-1">
-                            {revelado ? (
-                              <div className="text-xs sm:text-[13px] text-slate-700 font-normal leading-relaxed">
-                                <FormattedClinicalText text={(etapa.conteudoOculto || etapa.titulo || '').replace(/^\[.*?\]:\s*/, '')} />
-                              </div>
-                            ) : (
-                              <span className="text-xs font-bold text-white tracking-wide">
-                                [ Resposta Oculta - Toque para Revelar ]
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ) : (
-                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2">
-                  <div className="flex items-center justify-between pb-1 border-b border-slate-200/60">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-700">
-                      Etapas do Fluxo Clínico
-                    </span>
-                    <button
-                      onClick={revelarTodosBlocosFluxo}
-                      className="text-[9.5px] font-bold text-indigo-600 hover:text-indigo-800 px-2 py-0.5 rounded bg-white border border-slate-200 cursor-pointer"
-                    >
-                      Revelar Todos
-                    </button>
-                  </div>
-
-                  <div className="space-y-1.5 pt-1">
-                    {(cardAtual.blocosOclusao || []).map((bloco, idx) => {
-                      const revelado = blocosFluxoRevelados[bloco.id] || mostrarVerso;
-                      return (
-                        <div
-                          key={bloco.id || `bloco-oc-${idx}`}
-                          onClick={() => toggleBlocoFluxo(bloco.id)}
-                          className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer select-none active:scale-[0.99] ${
-                            revelado
-                              ? 'bg-white border-emerald-300 shadow-2xs'
-                              : 'bg-indigo-600 border-indigo-700 text-white shadow-xs hover:bg-indigo-500'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className={`text-[9px] font-bold uppercase ${revelado ? 'text-emerald-700' : 'text-indigo-200'}`}>
-                              Etapa #{idx + 1} {exibirDicas && bloco.dica && `• ${bloco.dica.replace(/^(\d+[\.\-\)]\s*|etapa\s*#?\d+[\:\-\.]?\s*)/i, '')}`}
-                            </span>
-                            <span className="text-[9px] opacity-80">
-                              {revelado ? 'Toque p/ ocultar' : 'Toque p/ revelar'}
-                            </span>
-                          </div>
-                          <div className="mt-1">
-                            {revelado ? (
-                              <div className="text-xs sm:text-[13px] leading-snug">
-                                <FormattedClinicalText text={(bloco.textoOculto || '').replace(/^\[.*?\]:\s*/, '')} />
-                              </div>
-                            ) : (
-                              <span className="text-xs font-bold text-white tracking-wide">
-                                [ Etapa Oculta - Toque para Revelar ]
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* =============================================================== */}
-          {/* FORMATO 4: CLOZE (LACUNAS CLICÁVEIS PARTE A PARTE)                */}
-          {/* =============================================================== */}
-          {isCloze && (
-            <div className="space-y-2">
-              <p className="text-[11px] font-semibold text-slate-800">
-                {cardAtual.perguntaGatilho || 'Complete as lacunas do texto clínico:'}
-              </p>
-
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 text-xs sm:text-sm font-medium text-slate-800 leading-relaxed whitespace-pre-line">
-                {cardAtual.textoCloze!.split(/(\{\{c\d+::[^\}]+\}\})/).map((part, i) => {
-                  const match = part.match(/\{\{c(\d+)::([^:\}]+)(?:::([^\}]+))?\}\}/);
-                  if (match) {
-                    const clozeNumero = parseInt(match[1], 10);
-                    const termoOculto = match[2];
-                    const dicaOpcional = match[3];
-                    const revelado = clozesRevelados[clozeNumero] || mostrarVerso;
 
                     return (
                       <button
-                        key={i}
-                        type="button"
-                        onClick={() => toggleClozeIndividual(clozeNumero)}
-                        className={`inline-flex items-center px-1.5 py-0.5 mx-0.5 rounded-md text-xs sm:text-sm font-bold transition-all cursor-pointer active:scale-95 ${
-                          revelado
-                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 underline decoration-emerald-500 decoration-2'
-                            : 'bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300'
-                        }`}
-                        title={revelado ? 'Clique para ocultar esta lacuna' : 'Clique para revelar esta lacuna'}
+                        key={idx}
+                        disabled={foiRespondido}
+                        onClick={() => handleSelecionarAlternativa(idx)}
+                        className={`w-full p-3 sm:p-3.5 rounded-xl border text-left text-[13.5px] sm:text-[14px] flex items-start gap-2.5 cursor-pointer touch-instant ${styleClass}`}
                       >
-                        {revelado ? termoOculto : (exibirDicas && dicaOpcional ? `[ ${dicaOpcional} ]` : `[...]`)}
+                        <span className={`w-6 h-6 sm:w-7 sm:h-7 rounded-lg font-semibold flex items-center justify-center shrink-0 text-xs mt-0.5 ${
+                          foiRespondido && eCorreta 
+                            ? 'bg-emerald-600 text-white' 
+                            : foiRespondido && foiEscolhida 
+                              ? 'bg-rose-600 text-white' 
+                              : 'bg-zinc-100 text-zinc-600 border border-zinc-200/80'
+                        }`}>
+                          {foiRespondido && eCorreta ? (
+                            <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" strokeWidth={2.2} />
+                          ) : foiRespondido && foiEscolhida ? (
+                            <XCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" strokeWidth={2.2} />
+                          ) : (
+                            letras[idx]
+                          )}
+                        </span>
+                        <span className="flex-1 leading-[1.6] pt-0.5">
+                          <FormattedClinicalText text={textoLimpo} />
+                        </span>
                       </button>
                     );
-                  }
-                  return <span key={i}>{part}</span>;
-                })}
-              </div>
-
-              <div className="flex items-center justify-between gap-2">
-                <button
-                  onClick={revelarTodosClozes}
-                  className="text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
-                >
-                  <Eye className="w-3 h-3" />
-                  <span>Revelar Todas as Lacunas</span>
-                </button>
-                <span className="text-[9px] text-slate-400">
-                  Toque na lacuna para revelar parte a parte
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* =============================================================== */}
-          {/* FORMATO 5: CONCEITO / PERGUNTA DIRETA GERAL                      */}
-          {/* =============================================================== */}
-          {!isCaso && !isImageOcclusion && !isCloze && !isFluxograma && (
-            <div className="space-y-2">
-              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100 min-h-16 flex items-center justify-center text-center">
-                <div className="text-xs sm:text-[13.5px] font-medium text-slate-800 leading-relaxed max-w-xl mx-auto">
-                  <FormattedClinicalText text={cardAtual.perguntaGatilho} />
+                  })}
                 </div>
-              </div>
-            </div>
-          )}
 
-          </div>
-
-          {/* =============================================================== */}
-          {/* RESPOSTA COMPLETA & PÉROLA CLÍNICA REVELADA                      */}
-          {/* =============================================================== */}
-          {!isCaso && !mostrarVerso && (
-            <div className="pt-2 flex items-center gap-2">
-              <button
-                onClick={() => setMostrarVerso(true)}
-                className="flex-1 py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-bold shadow-xs transition-transform duration-100 ease-out active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2 min-h-[48px]"
-              >
-                <Eye className="w-4 h-4" strokeWidth={2} />
-                <span>Ver Resposta Esperada (Espaço)</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handlePularCard}
-                title="Pular para o próximo flashcard (→)"
-                className="px-3.5 py-3 rounded-xl border border-slate-200 hover:border-slate-300 bg-slate-50 hover:bg-slate-100 text-slate-700 hover:text-blue-700 text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer min-h-[48px] shrink-0"
-              >
-                <span>Pular</span>
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          )}
-
-          {mostrarVerso && !isCaso && (
-            <div className="space-y-2.5 animate-in fade-in pt-1">
-              <div className="-mx-3 sm:-mx-5 px-3 sm:px-5 py-3 sm:py-3.5 bg-blue-50/20 border-t-2 border-b border-blue-200/80 text-slate-900 space-y-2.5">
-                <div className="text-center pb-1.5 border-b border-blue-100/90">
-                  <span className="text-blue-900 text-xs sm:text-[13px] uppercase font-bold tracking-wider inline-block">
-                    Resposta Esperada
-                  </span>
-                </div>
-                <FormattedClinicalText text={cardAtual.resposta} />
-                {cardAtual.perolaClinica && (
-                  <div className="mt-2.5 p-2.5 sm:p-3 bg-amber-100/90 rounded-xl border-2 border-amber-300/90 text-slate-950 flex items-start gap-2 shadow-3xs">
-                    <span className="text-amber-700 font-bold shrink-0 select-none text-sm mt-0.5">💡</span>
-                    <div className="flex-1 min-w-0 text-left">
-                      <span className="font-black text-amber-900 uppercase tracking-wider text-[10px] sm:text-[10.5px] mr-1.5 inline-block">
-                        Dica:
+                {respostaSelecionada !== null && (
+                  <div className="p-3.5 sm:p-4 rounded-2xl bg-emerald-50/50 border border-emerald-200/90 text-zinc-900 space-y-2 animate-card-reveal text-left">
+                    <div className="flex items-center justify-between pb-1.5 border-b border-emerald-200/60">
+                      <div className="flex items-center gap-1.5 text-emerald-900 font-semibold text-xs">
+                        <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Gabarito & Justificativa</span>
+                      </div>
+                      <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100/90 text-emerald-900">
+                        Alternativa {['A', 'B', 'C', 'D', 'E'][cardAtual.casoClinicoDados!.indiceCorreto]}
                       </span>
-                      <span className="font-semibold text-slate-900 text-xs sm:text-[12.5px] leading-relaxed">
-                        {cardAtual.perolaClinica}
-                      </span>
+                    </div>
+                    <div className="text-zinc-800 text-[13.5px] sm:text-[14.5px] leading-[1.65]">
+                      <FormattedClinicalText text={cardAtual.casoClinicoDados!.justificativaDetalhada} />
                     </div>
                   </div>
                 )}
               </div>
+            )}
 
-              {((exibirDicas && cardAtual.mnemonicoOuDica) || cardAtual.diretrizReferencia) && (
-                <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5 text-[10px] text-slate-500">
-                  {exibirDicas && cardAtual.mnemonicoOuDica && (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50/80 text-amber-900 border border-amber-200/70 font-sans text-[10px] font-medium leading-relaxed">
-                      <span>💡</span>
+            {/* =============================================================== */}
+            {/* FORMATO 2: OCLUSÃO DE IMAGEM (SVG POLÍGONOS + RETÂNGULOS)        */}
+            {/* =============================================================== */}
+            {isImageOcclusion && (
+              <div className="space-y-3">
+                <p className="text-xs sm:text-[13px] font-medium text-zinc-600">
+                  {cardAtual.perguntaGatilho || 'Identifique as estruturas ocluídas na imagem:'}
+                </p>
+
+                <div className="relative w-full rounded-2xl overflow-hidden border border-zinc-200 bg-zinc-950 flex items-center justify-center p-1 sm:p-2 select-none">
+                  <div 
+                    className="relative inline-block max-w-full select-none"
+                    style={{ lineHeight: 0 }}
+                  >
+                    <img
+                      src={cardAtual.imagemUrl}
+                      alt={cardAtual.titulo}
+                      className="block max-w-full h-auto max-h-[60vh] sm:max-h-[480px] w-auto mx-auto select-none pointer-events-none"
+                      referrerPolicy="no-referrer"
+                    />
+
+                    {/* Camada SVG para Máscaras Livres com Polígonos */}
+                    <svg 
+                      className="absolute inset-0 w-full h-full pointer-events-none" 
+                      viewBox="0 0 100 100" 
+                      preserveAspectRatio="none"
+                    >
+                      {(cardAtual.mascarasImagem || [])
+                        .filter(m => m.tipoForma === 'livre' && m.pontos && m.pontos.length > 2)
+                        .map((m) => {
+                          const revelado = mascarasReveladas[m.id];
+                          const pontosString = m.pontos!.map(p => `${p.x},${p.y}`).join(' ');
+
+                          return (
+                            <g
+                              key={m.id}
+                              className="pointer-events-auto cursor-pointer"
+                              onClick={() => toggleMascaraOclusao(m.id)}
+                            >
+                              <polygon
+                                points={pontosString}
+                                fill={revelado ? 'transparent' : '#4f46e5'}
+                                fillOpacity={revelado ? 0 : 1}
+                                stroke={revelado ? 'rgba(16, 185, 129, 0.7)' : '#c7d2fe'}
+                                strokeWidth={revelado ? '1' : '1.2'}
+                                strokeDasharray={revelado ? '2,2' : undefined}
+                                className="hover:brightness-110"
+                              />
+                              {!revelado && (
+                                <text
+                                  x={m.x + m.largura / 2}
+                                  y={m.y + m.altura / 2}
+                                  textAnchor="middle"
+                                  dominantBaseline="middle"
+                                  fill="#ffffff"
+                                  fontSize="3.8"
+                                  fontWeight="bold"
+                                  className="select-none pointer-events-none drop-shadow-sm"
+                                >
+                                  [ #{m.numero} ]
+                                </text>
+                              )}
+                            </g>
+                          );
+                        })}
+                    </svg>
+
+                    {/* Máscaras Retangulares */}
+                    {(cardAtual.mascarasImagem || [])
+                      .filter(m => m.tipoForma !== 'livre' || !m.pontos || m.pontos.length <= 2)
+                      .map((m) => {
+                        const revelado = mascarasReveladas[m.id];
+
+                        return (
+                          <div
+                            key={m.id}
+                            onClick={() => toggleMascaraOclusao(m.id)}
+                            className={`absolute rounded-md flex items-center justify-center text-center p-1 text-xs cursor-pointer select-none touch-instant ${
+                              revelado
+                                ? 'bg-transparent border-2 border-dashed border-emerald-500/70 hover:bg-emerald-500/10'
+                                : 'bg-indigo-600 hover:bg-indigo-500 text-white font-bold border border-indigo-300 shadow-sm opacity-100'
+                            }`}
+                            style={{
+                              left: `${m.x}%`,
+                              top: `${m.y}%`,
+                              width: `${m.largura}%`,
+                              height: `${m.altura}%`,
+                              opacity: revelado ? undefined : 1,
+                            }}
+                            title={revelado ? `Estrutura revelada: ${m.textoOculto} (toque para ocultar)` : `Toque para revelar estrutura #${m.numero}`}
+                          >
+                            {!revelado && (
+                              <span className="text-[10px] font-black bg-white/20 px-1 py-0.2 rounded-sm">
+                                #{m.numero}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+
+                {/* Botões de Ação e Status */}
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    onClick={revelarTodasMascaras}
+                    className="text-[11px] font-semibold text-indigo-700 bg-indigo-50/80 hover:bg-indigo-100/80 border border-indigo-200/80 px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer touch-instant"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>Revelar Todas</span>
+                  </button>
+                  <span className="text-[11px] text-zinc-400">
+                    Toque na máscara para revelar
+                  </span>
+                </div>
+
+                {/* Lista de estruturas abaixo da imagem */}
+                {(cardAtual.mascarasImagem || []).length > 0 && (
+                  <div className="space-y-1.5 pt-1">
+                    <div className="text-[10.5px] font-semibold text-zinc-500 uppercase tracking-wider flex items-center justify-between">
+                      <span>Estruturas Ocluídas:</span>
+                      <span className="text-[10px] font-medium text-zinc-400">
+                        {(cardAtual.mascarasImagem || []).filter(m => mascarasReveladas[m.id]).length}/{(cardAtual.mascarasImagem || []).length}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                      {(cardAtual.mascarasImagem || []).map((m) => {
+                        const revelado = mascarasReveladas[m.id];
+                        return (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => toggleMascaraOclusao(m.id)}
+                            className={`w-full p-2.5 rounded-xl border text-left flex items-center gap-2.5 cursor-pointer select-none touch-instant ${
+                              revelado
+                                ? 'bg-emerald-50/80 border-emerald-200 text-emerald-950'
+                                : 'bg-zinc-50/80 hover:bg-zinc-100 border-zinc-200/80 text-zinc-600'
+                            }`}
+                          >
+                            <span
+                              className={`shrink-0 w-6 h-6 rounded-lg text-[10px] font-bold flex items-center justify-center ${
+                                revelado
+                                  ? 'bg-emerald-600 text-white'
+                                  : 'bg-zinc-200/80 text-zinc-700'
+                              }`}
+                            >
+                              #{m.numero}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              {revelado ? (
+                                <div className="text-[13px] sm:text-[13.5px] leading-snug break-words">
+                                  <FormattedClinicalText text={m.textoOculto} />
+                                </div>
+                              ) : (
+                                <span className="text-xs font-medium text-zinc-400">
+                                  Toque para revelar #{m.numero}
+                                </span>
+                              )}
+                              {exibirDicas && m.dica && (
+                                <span className="text-[10px] text-zinc-400 block truncate mt-0.5">
+                                  Dica: {m.dica}
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* =============================================================== */}
+            {/* FORMATO 3A: FLUXOGRAMA CLÍNICO (DIAGNÓSTICO / RASTREIO / CONDUTA)*/}
+            {/* =============================================================== */}
+            {isFluxogramaComplexo && (
+              <ComplexFlowchartViewer
+                fluxograma={
+                  cardAtual.fluxogramaComplexo || {
+                    id: cardAtual.id,
+                    titulo: cardAtual.titulo,
+                    descricao: cardAtual.perolaClinica,
+                    noInicialId: 'no-1',
+                    nos: [
+                      {
+                        id: 'no-1',
+                        titulo: cardAtual.perguntaGatilho || cardAtual.titulo,
+                        descricao: cardAtual.resposta,
+                        tipo: 'inicio',
+                        ramos: [],
+                      },
+                    ],
+                  }
+                }
+                initialFullScreen={false}
+                comfortMode={confortoVisual}
+                tituloContexto={cardAtual.titulo}
+                perguntaGatilho={cardAtual.perguntaGatilho || (cardAtual as any).pergunta}
+                card={cardAtual}
+                onRegistrarConclusao={() => setMostrarVerso(true)}
+              />
+            )}
+
+            {/* =============================================================== */}
+            {/* FORMATO 3B: PASSO A PASSO SEQUENCIAL (PASSO 1 AO FIM OCLUÍDOS)   */}
+            {/* =============================================================== */}
+            {isFluxograma && (
+              <div className="space-y-3 text-left">
+                {/* Pergunta / Tópico Norteador Direto ao Ponto */}
+                <div
+                  className={`p-3.5 rounded-2xl border text-[14px] sm:text-[15px] font-medium text-zinc-800 leading-[1.62] ${
+                    confortoVisual ? 'bg-[#F3EFE8] border-[#E4DECF]' : 'bg-zinc-50/80 border-zinc-200/80'
+                  }`}
+                >
+                  <FormattedClinicalText
+                    text={limparPerguntaNorteadora(cardAtual.perguntaGatilho, cardAtual.titulo)}
+                  />
+                </div>
+
+                {/* Cabeçalho Minimalista de Progresso dos Passos */}
+                <div className="flex items-center justify-between gap-2 px-0.5">
+                  <span className="text-[11px] font-semibold text-zinc-500">
+                    Sequência Passo a Passo ({passosNormalizados.filter(p => blocosFluxoRevelados[p.id] || mostrarVerso).length}/{passosNormalizados.length} revelados)
+                  </span>
+
+                  <div className="flex items-center gap-1.5">
+                    {mostrarVerso ? (
+                      <button
+                        type="button"
+                        onClick={ocultarTodosBlocosFluxo}
+                        className="text-[11px] font-semibold text-zinc-600 hover:text-zinc-900 bg-zinc-100 hover:bg-zinc-200 px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer touch-instant"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        <span>Ocultar Passos</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={revelarTodosBlocosFluxo}
+                        className="text-[11px] font-semibold text-zinc-600 hover:text-zinc-900 bg-zinc-100 hover:bg-zinc-200 px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer touch-instant"
+                      >
+                        <Eye className="w-3 h-3" />
+                        <span>Revelar Todos</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Lista Sequencial Limpa (Passo 1 até o fim, TODOS começando ocluídos) */}
+                <div className="space-y-2">
+                  {passosNormalizados.map((passo, idx) => {
+                    const revelado = !!blocosFluxoRevelados[passo.id] || mostrarVerso;
+                    const primeiroNaoReveladoIdx = passosNormalizados.findIndex(
+                      p => !blocosFluxoRevelados[p.id] && !mostrarVerso
+                    );
+                    const ehProximoDaVez = idx === primeiroNaoReveladoIdx;
+
+                    return (
+                      <div key={passo.id} className="space-y-1">
+                        {idx > 0 && (
+                          <div className="flex justify-center py-0.5 select-none">
+                            <ArrowDown className="w-3.5 h-3.5 text-zinc-300" strokeWidth={2.2} />
+                          </div>
+                        )}
+
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => toggleBlocoFluxo(passo.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              toggleBlocoFluxo(passo.id);
+                            }
+                          }}
+                          className={`w-full p-3.5 sm:p-4 rounded-2xl border text-left cursor-pointer select-none touch-instant transition-colors ${
+                            revelado
+                              ? confortoVisual
+                                ? 'bg-white border-[#DFD8C8] text-stone-900 shadow-[0_1px_2px_rgba(0,0,0,0.02)]'
+                                : 'bg-white border-zinc-200/90 text-zinc-900 shadow-[0_1px_2px_rgba(0,0,0,0.02)]'
+                              : ehProximoDaVez
+                              ? 'bg-zinc-900 hover:bg-zinc-800 border-zinc-900 text-white shadow-xs'
+                              : 'bg-zinc-100/90 hover:bg-zinc-200/75 border-zinc-200/80 text-zinc-600'
+                          }`}
+                        >
+                          {revelado ? (
+                            <div className="flex items-start gap-3 animate-card-reveal">
+                              <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
+                                {passo.numero}
+                              </span>
+                              <div className="flex-1 min-w-0 space-y-1">
+                                {passo.titulo && (
+                                  <p className="text-[13.5px] sm:text-[14.5px] font-semibold text-zinc-900 leading-snug">
+                                    <FormattedClinicalText text={passo.titulo} />
+                                  </p>
+                                )}
+                                <div className="text-[13.5px] sm:text-[14.5px] text-zinc-800 font-normal leading-[1.64]">
+                                  <FormattedClinicalText text={passo.conteudo} />
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-between gap-2.5">
+                              <div className="flex items-center gap-2.5">
+                                <span
+                                  className={`w-6 h-6 rounded-lg text-xs font-bold flex items-center justify-center shrink-0 ${
+                                    ehProximoDaVez
+                                      ? 'bg-white/15 text-white'
+                                      : 'bg-zinc-200/80 text-zinc-700'
+                                  }`}
+                                >
+                                  {passo.numero}
+                                </span>
+                                <span
+                                  className={`text-[13px] sm:text-[13.5px] font-semibold ${
+                                    ehProximoDaVez ? 'text-white' : 'text-zinc-600'
+                                  }`}
+                                >
+                                  Passo {passo.numero}
+                                </span>
+                              </div>
+
+                              <span
+                                className={`inline-flex items-center gap-1.5 text-xs font-medium ${
+                                  ehProximoDaVez ? 'text-emerald-300' : 'text-zinc-400'
+                                }`}
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                <span>{ehProximoDaVez ? 'Toque para revelar' : 'Ocluído'}</span>
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* =============================================================== */}
+            {/* FORMATO 4: CLOZE (LACUNAS CLICÁVEIS PARTE A PARTE)                */}
+            {/* =============================================================== */}
+            {isCloze && (
+              <div className="space-y-2.5">
+                <p className="text-xs sm:text-[13px] font-medium text-zinc-500">
+                  {cardAtual.perguntaGatilho || 'Toque nas lacunas para revelar o termo clínico:'}
+                </p>
+
+                <div
+                  className={`p-3.5 sm:p-4 rounded-2xl border text-[14px] sm:text-[15px] font-normal text-zinc-800 leading-[1.72] whitespace-pre-line ${
+                    confortoVisual ? 'bg-[#F3EFE8] border-[#E4DECF]' : 'bg-zinc-50/70 border-zinc-200/70'
+                  }`}
+                >
+                  {cardAtual.textoCloze!.split(/(\{\{c\d+::[^\}]+\}\})/).map((part, i) => {
+                    const match = part.match(/\{\{c(\d+)::([^:\}]+)(?:::([^\}]+))?\}\}/);
+                    if (match) {
+                      const clozeNumero = parseInt(match[1], 10);
+                      const termoOculto = match[2];
+                      const dicaOpcional = match[3];
+                      const revelado = clozesRevelados[clozeNumero] || mostrarVerso;
+
+                      return (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => toggleClozeIndividual(clozeNumero)}
+                          className={`inline-flex items-center px-2 py-0.5 mx-0.5 rounded-md text-[13.5px] sm:text-[14.5px] font-semibold cursor-pointer touch-instant ${
+                            revelado
+                              ? 'bg-emerald-100/90 text-emerald-900 border border-emerald-300/80'
+                              : 'bg-amber-100/90 hover:bg-amber-200/80 text-amber-950 border border-amber-300/80'
+                          }`}
+                          title={revelado ? 'Toque para ocultar esta lacuna' : 'Toque para revelar esta lacuna'}
+                        >
+                          {revelado ? termoOculto : (exibirDicas && dicaOpcional ? `[ ${dicaOpcional} ]` : `[ ... ]`)}
+                        </button>
+                      );
+                    }
+                    return <span key={i}>{part}</span>;
+                  })}
+                </div>
+
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    onClick={revelarTodosClozes}
+                    className="text-[11px] font-semibold text-emerald-800 bg-emerald-50/80 hover:bg-emerald-100 border border-emerald-200/80 px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer touch-instant"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>Revelar Todas as Lacunas</span>
+                  </button>
+                  <span className="text-[11px] text-zinc-400">
+                    Toque em cada lacuna para testar
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* =============================================================== */}
+            {/* FORMATO 5: CONCEITO / PERGUNTA DIRETA (TOQUE NO CARD VIRA)       */}
+            {/* =============================================================== */}
+            {!isCaso && !isImageOcclusion && !isCloze && !isFluxograma && !isFluxogramaComplexo && (
+              <div
+                role={!mostrarVerso ? 'button' : undefined}
+                tabIndex={!mostrarVerso ? 0 : undefined}
+                onClick={() => {
+                  if (!mostrarVerso) setMostrarVerso(true);
+                }}
+                onKeyDown={(e) => {
+                  if (!mostrarVerso && (e.key === 'Enter' || e.key === ' ')) {
+                    e.preventDefault();
+                    setMostrarVerso(true);
+                  }
+                }}
+                className={`p-4 sm:p-5 rounded-2xl border min-h-[112px] flex flex-col justify-center text-left ${
+                  !mostrarVerso ? 'cursor-pointer touch-instant' : ''
+                } ${
+                  confortoVisual
+                    ? 'bg-[#F3EFE8] border-[#E4DECF] hover:border-stone-300'
+                    : 'bg-zinc-50/70 border-zinc-200/70 hover:border-zinc-300/80'
+                }`}
+              >
+                <div className="text-[14px] sm:text-[15.5px] font-normal text-zinc-800 leading-[1.68] w-full">
+                  <FormattedClinicalText text={cardAtual.perguntaGatilho} />
+                </div>
+                {!mostrarVerso && (
+                  <div className="mt-3 pt-2 border-t border-zinc-200/50 flex items-center justify-center gap-1.5 text-[11px] font-medium text-zinc-400 select-none">
+                    <Eye className="w-3 h-3" />
+                    <span>Toque aqui ou no botão abaixo para revelar a resposta</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* =============================================================== */}
+            {/* RESPOSTA COMPLETA & PÉROLA CLÍNICA REVELADA                      */}
+            {/* =============================================================== */}
+            {mostrarVerso && !isCaso && (
+              <div className="space-y-3 animate-card-reveal pt-1">
+                {!isFluxograma && !isFluxogramaComplexo ? (
+                  <div
+                    className={`p-4 sm:p-5 rounded-2xl border space-y-3 ${
+                      confortoVisual
+                        ? 'bg-[#F6F2EA] border-[#DFD8C8] text-stone-900'
+                        : 'bg-zinc-50/50 border-zinc-200/85 text-zinc-900'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between pb-2 border-b border-zinc-200/70">
+                      <span className="text-zinc-700 text-[11px] uppercase font-bold tracking-wider flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Resposta Esperada</span>
+                      </span>
+                      {cardAtual.diretrizReferencia && (
+                        <span className="text-[10.5px] text-zinc-400 font-medium truncate max-w-[60%]">
+                          {cardAtual.diretrizReferencia}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="text-[14px] sm:text-[15px] leading-[1.68]">
+                      <FormattedClinicalText text={cardAtual.resposta} />
+                    </div>
+
+                    {cardAtual.perolaClinica && (
+                      <div
+                        className={`mt-3 p-3 sm:p-3.5 rounded-xl border flex items-start gap-2.5 ${
+                          confortoVisual
+                            ? 'bg-amber-50/70 border-amber-200/80 text-amber-950'
+                            : 'bg-amber-50/75 border-amber-200/75 text-amber-950'
+                        }`}
+                      >
+                        <span className="text-amber-600 shrink-0 select-none text-sm mt-0.5">💡</span>
+                        <div className="flex-1 min-w-0 text-left text-[13px] sm:text-[13.5px] leading-[1.6]">
+                          <span className="font-bold text-amber-900 uppercase tracking-wider text-[10.5px] mr-1.5">
+                            Ponto-Chave:
+                          </span>
+                          <span className="font-medium text-zinc-800">
+                            {cardAtual.perolaClinica}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  cardAtual.perolaClinica && (
+                    <div
+                      className={`p-3 sm:p-3.5 rounded-xl border flex items-start gap-2.5 ${
+                        confortoVisual
+                          ? 'bg-amber-50/70 border-amber-200/80 text-amber-950'
+                          : 'bg-amber-50/75 border-amber-200/75 text-amber-950'
+                      }`}
+                    >
+                      <span className="text-amber-600 shrink-0 select-none text-sm mt-0.5">💡</span>
+                      <div className="flex-1 min-w-0 text-left text-[13px] sm:text-[13.5px] leading-[1.6]">
+                        <span className="font-bold text-amber-900 uppercase tracking-wider text-[10.5px] mr-1.5">
+                          Ponto-Chave:
+                        </span>
+                        <span className="font-medium text-zinc-800">
+                          {cardAtual.perolaClinica}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                )}
+
+                {exibirDicas && cardAtual.mnemonicoOuDica && (
+                  <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-50/70 text-amber-900 border border-amber-200/60 text-xs font-medium leading-relaxed">
+                      <span>🧠</span>
                       <span>{cardAtual.mnemonicoOuDica}</span>
                     </span>
+                  </div>
+                )}
+              </div>
+            )}
+            </div>
+
+            {/* =============================================================== */}
+            {/* BARRA INFERIOR FIXA NA ZONA DO POLEGAR (VIRAR / AVALIAR SRS)     */}
+            {/* =============================================================== */}
+            <div
+              className={`sticky bottom-0 z-20 -mx-3.5 sm:-mx-6 px-3.5 sm:px-6 pt-3 pb-3 sm:pb-4 mt-4 border-t backdrop-blur-md transition-colors duration-200 ${
+                confortoVisual
+                  ? 'bg-[#FAF8F5]/95 border-[#E6E0D6]'
+                  : 'bg-white/95 border-zinc-100'
+              }`}
+            >
+              {!isCaso && !mostrarVerso && (
+                <div className="flex items-center gap-2">
+                  {isFluxograma && passosNormalizados.length > 0 ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={revelarProximoBlocoFluxo}
+                        className="flex-1 py-3.5 px-4 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-[13px] sm:text-sm font-semibold cursor-pointer flex items-center justify-center gap-2 min-h-[48px] touch-instant shadow-xs"
+                      >
+                        <Eye className="w-4 h-4" strokeWidth={2} />
+                        <span>
+                          {(() => {
+                            const prox = passosNormalizados.find(p => !blocosFluxoRevelados[p.id]);
+                            return prox
+                              ? `Revelar Passo ${prox.numero} (${prox.numero}/${passosNormalizados.length})`
+                              : 'Ver Todos os Passos';
+                          })()}
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={revelarTodosBlocosFluxo}
+                        title="Revelar todos os passos de uma vez"
+                        className={`px-3 py-3.5 rounded-xl border text-xs font-semibold flex items-center gap-1 cursor-pointer min-h-[48px] shrink-0 touch-instant ${
+                          confortoVisual
+                            ? 'bg-[#EFECE6] border-[#E2DDD3] text-stone-700 hover:bg-[#E6E1D8]'
+                            : 'bg-zinc-50 border-zinc-200/90 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900'
+                        }`}
+                      >
+                        <span>Tudo</span>
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setMostrarVerso(true)}
+                      className="flex-1 py-3.5 px-4 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-[13px] sm:text-sm font-semibold cursor-pointer flex items-center justify-center gap-2 min-h-[48px] touch-instant shadow-xs"
+                    >
+                      <Eye className="w-4 h-4" strokeWidth={2} />
+                      <span>{isFluxogramaComplexo ? 'Avaliar / Concluir Fluxograma' : 'Ver Resposta Esperada'}</span>
+                    </button>
                   )}
-                  {cardAtual.diretrizReferencia && (
-                    <span className="text-[10px] text-slate-400 font-sans ml-auto">
-                      Ref: {cardAtual.diretrizReferencia}
-                    </span>
-                  )}
+
+                  <button
+                    type="button"
+                    onClick={handlePularCard}
+                    title="Pular para o próximo flashcard (→)"
+                    className={`px-3.5 py-3.5 rounded-xl border text-xs font-semibold flex items-center gap-1 cursor-pointer min-h-[48px] shrink-0 touch-instant ${
+                      confortoVisual
+                        ? 'bg-[#EFECE6] border-[#E2DDD3] text-stone-700 hover:bg-[#E6E1D8]'
+                        : 'bg-zinc-50 border-zinc-200/90 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900'
+                    }`}
+                  >
+                    <span>Pular</span>
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+
+              {(mostrarVerso || respostaSelecionada !== null) && (
+                <div className="space-y-2 animate-card-reveal">
+                  <div className="flex items-center justify-between text-[10.5px] text-zinc-400 font-medium px-0.5">
+                    <span>{modoAtivo === 'estudo' ? 'Concluir estudo deste card:' : 'Avaliação rápida de retenção:'}</span>
+                    <span className="hidden sm:inline">Teclas: 1, 2, 3, 4</span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
+                    <button
+                      type="button"
+                      id="btn-srs-errei"
+                      onClick={() => responder('errei')}
+                      className="flex flex-col items-center justify-center py-2.5 px-1 rounded-xl bg-rose-50/70 hover:bg-rose-100/80 border border-rose-200/85 text-rose-800 font-semibold cursor-pointer min-h-[50px] touch-instant"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5 text-rose-600 mb-0.5" strokeWidth={1.9} />
+                      <span className="text-xs font-bold">Errei</span>
+                      <span className="text-[10px] text-rose-600/90 font-medium">
+                        {modoAtivo === 'estudo' ? 'Rever 12h' : (infoRodada ? formatarTempoMinutos(infoRodada.timers.erreiMinutos) : '2m')}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      id="btn-srs-dificil"
+                      onClick={() => responder('dificil')}
+                      className="flex flex-col items-center justify-center py-2.5 px-1 rounded-xl bg-amber-50/70 hover:bg-amber-100/80 border border-amber-200/85 text-amber-800 font-semibold cursor-pointer min-h-[50px] touch-instant"
+                    >
+                      <AlertCircle className="w-3.5 h-3.5 text-amber-600 mb-0.5" strokeWidth={1.9} />
+                      <span className="text-xs font-bold">Difícil</span>
+                      <span className="text-[10px] text-amber-700/90 font-medium">
+                        {modoAtivo === 'estudo' ? 'Amanhã' : (infoRodada ? formatarTempoMinutos(infoRodada.timers.dificilMinutos) : '5m')}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      id="btn-srs-bom"
+                      onClick={() => responder('bom')}
+                      className="flex flex-col items-center justify-center py-2.5 px-1 rounded-xl bg-sky-50/85 hover:bg-sky-100/90 border border-sky-200/90 text-sky-900 font-semibold cursor-pointer min-h-[50px] touch-instant"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5 text-sky-600 mb-0.5" strokeWidth={1.9} />
+                      <span className="text-xs font-bold">Bom</span>
+                      <span className="text-[10px] text-sky-700/90 font-medium">
+                        {modoAtivo === 'estudo' ? 'Estudado ✓' : (infoRodada ? formatarTempoMinutos(infoRodada.timers.bomMinutos) : '15m')}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      id="btn-srs-facil"
+                      onClick={() => responder('facil')}
+                      className="flex flex-col items-center justify-center py-2.5 px-1 rounded-xl bg-emerald-50/75 hover:bg-emerald-100/85 border border-emerald-200/85 text-emerald-800 font-semibold cursor-pointer min-h-[50px] touch-instant"
+                    >
+                      <Zap className="w-3.5 h-3.5 text-emerald-600 mb-0.5" strokeWidth={1.9} />
+                      <span className="text-xs font-bold">Fácil</span>
+                      <span className="text-[10px] text-emerald-700/90 font-medium">
+                        {modoAtivo === 'estudo' ? 'Dominado ✓✓' : (infoRodada ? formatarTempoMinutos(infoRodada.timers.facilMinutos) : '30m')}
+                      </span>
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
-          )}
-
-          {/* =============================================================== */}
-          {/* AVALIAÇÃO SRS (ESPAÇO / 1, 2, 3, 4)                             */}
-          {/* =============================================================== */}
-          {(mostrarVerso || respostaSelecionada !== null) && (
-            <div className="pt-3 border-t border-slate-100 space-y-2">
-              <div className="flex items-center justify-between text-[10px] text-slate-400 font-semibold px-0.5">
-                <span>{modoAtivo === 'estudo' ? 'Concluir Estudo deste Card:' : 'Avaliação de Retenção (SRS):'}</span>
-                <span className="hidden sm:inline">Atalhos: 1, 2, 3, 4</span>
-              </div>
-              <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
-                <button
-                  id="btn-srs-errei"
-                  onClick={() => responder('errei')}
-                  className="flex flex-col items-center justify-center py-2 sm:py-2.5 px-1 rounded-xl bg-white border border-rose-200 text-rose-700 hover:bg-rose-50 font-bold transition-transform duration-100 ease-out shadow-3xs active:scale-[0.98] cursor-pointer min-h-[48px]"
-                >
-                  <RotateCcw className="w-3.5 h-3.5 text-rose-500 mb-0.5" strokeWidth={1.75} />
-                  <span className="text-[11px] sm:text-xs">Errei</span>
-                  <span className="text-[9.5px] text-rose-500 font-semibold">
-                    {modoAtivo === 'estudo' ? 'Rever 12h' : (infoRodada ? formatarTempoMinutos(infoRodada.timers.erreiMinutos) : '2m')}
-                  </span>
-                </button>
-
-                <button
-                  id="btn-srs-dificil"
-                  onClick={() => responder('dificil')}
-                  className="flex flex-col items-center justify-center py-2 sm:py-2.5 px-1 rounded-xl bg-white border border-amber-200 text-amber-700 hover:bg-amber-50 font-bold transition-transform duration-100 ease-out shadow-3xs active:scale-[0.98] cursor-pointer min-h-[48px]"
-                >
-                  <AlertCircle className="w-3.5 h-3.5 text-amber-500 mb-0.5" strokeWidth={1.75} />
-                  <span className="text-[11px] sm:text-xs">Difícil</span>
-                  <span className="text-[9.5px] text-amber-500 font-semibold">
-                    {modoAtivo === 'estudo' ? 'Amanhã' : (infoRodada ? formatarTempoMinutos(infoRodada.timers.dificilMinutos) : '5m')}
-                  </span>
-                </button>
-
-                <button
-                  id="btn-srs-bom"
-                  onClick={() => responder('bom')}
-                  className="flex flex-col items-center justify-center py-2 sm:py-2.5 px-1 rounded-xl bg-blue-50 border border-blue-300 text-blue-700 hover:bg-blue-100 font-bold transition-transform duration-100 ease-out shadow-3xs active:scale-[0.98] cursor-pointer min-h-[48px]"
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5 text-blue-500 mb-0.5" strokeWidth={1.75} />
-                  <span className="text-[11px] sm:text-xs">Bom</span>
-                  <span className="text-[9.5px] text-blue-600 font-semibold">
-                    {modoAtivo === 'estudo' ? 'Estudado ✓' : (infoRodada ? formatarTempoMinutos(infoRodada.timers.bomMinutos) : '15m')}
-                  </span>
-                </button>
-
-                <button
-                  id="btn-srs-facil"
-                  onClick={() => responder('facil')}
-                  className="flex flex-col items-center justify-center py-2 sm:py-2.5 px-1 rounded-xl bg-white border border-emerald-200 text-emerald-700 hover:bg-emerald-50 font-bold transition-transform duration-100 ease-out shadow-3xs active:scale-[0.98] cursor-pointer min-h-[48px]"
-                >
-                  <Zap className="w-3.5 h-3.5 text-emerald-500 mb-0.5" strokeWidth={1.75} />
-                  <span className="text-[11px] sm:text-xs">Fácil</span>
-                  <span className="text-[9.5px] text-emerald-600 font-semibold">
-                    {modoAtivo === 'estudo' ? 'Dominado ✓✓' : (infoRodada ? formatarTempoMinutos(infoRodada.timers.facilMinutos) : '30m')}
-                  </span>
-                </button>
-              </div>
-            </div>
-          )}
+          </div>
         </div>
       </div>
+
 
       {/* Toast de Atualização Rápida */}
       {quickToast && (
